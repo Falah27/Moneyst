@@ -24,8 +24,12 @@
   <!-- ============ APLIKASI ============ -->
   <div class="mx-auto min-h-dvh max-w-md pb-28">
 
-    <div x-show="!online" class="bg-amber-100 px-4 py-1 text-center text-xs text-amber-800">
-      Offline — perubahan akan disinkronkan saat online
+    <div x-show="!online || pending || syncErr"
+      class="px-4 py-1 text-center text-xs"
+      :class="syncErr ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'">
+      <span x-show="syncErr" x-text="'Gagal sinkron: ' + syncErr"></span>
+      <span x-show="!syncErr && !online">Offline — perubahan akan disinkronkan saat online</span>
+      <span x-show="!syncErr && online && pending">Menunggu data terkirim ke server…</span>
     </div>
 
     <!-- Pemilih periode (Beranda, Statistik, Rencana) -->

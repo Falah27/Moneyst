@@ -9,6 +9,7 @@ const app = initializeApp(firebaseConfig);
 
 export const db = initializeFirestore(app, {
   localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+  experimentalAutoDetectLongPolling: true, // membantu di jaringan/antivirus yang mengganggu koneksi
 });
 
 // semua data berada di spaces/{SPACE_ID}/{nama}

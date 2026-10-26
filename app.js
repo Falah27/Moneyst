@@ -37,6 +37,7 @@ if ('serviceWorker' in navigator) {
 document.addEventListener('alpine:init', () => {
   Alpine.data('app', () => ({
     busy: false,
+    pending: false, syncErr: '',
     online: navigator.onLine,
 
     // ----- data (dari Firestore) -----
@@ -84,7 +85,9 @@ document.addEventListener('alpine:init', () => {
         : col('transactions');
 
       unsubs = [
-        onSnapshot(txSource, snap => {
+        onSnapshot(txSource, { includeMetadataChanges: true }, snap => {
+          this.pending = snap.metadata.hasPendingWrites; // true = ada data belum terkirim ke server
+          this.syncErr = '';
           this.txs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
           this.recompute();
           // kalau halaman edit dibuka langsung (reload), isi form setelah data tiba
@@ -359,8 +362,10 @@ document.addEventListener('alpine:init', () => {
     async doImport() {
       if (!navigator.onLine) return alert('Import butuh koneksi internet.');
       this.busy = true;
+      this.importMsg = 'Menyiapkan…';
       try {
-        const r = await commitImport(this.preview, this.cats, this.methods, this.txs);
+        const r = await commitImport(this.preview, this.cats, this.methods, this.txs,
+          (d, t) => (this.importMsg = `Mengirim ${d} dari ${t}…`));
         this.importMsg = `Selesai: ${r.added} transaksi masuk, ${r.skipped} dilewati (sudah ada).`;
         this.preview = null;
       } catch (e) {

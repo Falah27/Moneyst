@@ -66,20 +66,41 @@ export function parseCsv(file) {
 
 const keyOf = (date, item, amount, type) => `${date}|${item.toLowerCase()}|${amount}|${type}`;
 
-export async function commitImport(rows, cats, methods, existingTxs) {
+// hash kecil untuk membuat ID yang selalu sama dari isi yang sama
+function hash(str) {
+  let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+  for (let i = 0; i < str.length; i++) {
+    const ch = str.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+}
+
+const timeout = (ms, msg) => new Promise((_, rej) => setTimeout(() => rej(new Error(msg)), ms));
+
+export async function commitImport(rows, cats, methods, existingTxs, onProgress = () => {}) {
   const catMap = new Map(cats.map(c => [`${c.type}:${c.name.toLowerCase()}`, c.id]));
   const methodMap = new Map(methods.map(m => [m.name.toLowerCase(), m.id]));
-  const existing = new Set(existingTxs.map(t => keyOf(t.date, t.item, t.amount, t.type)));
+
+  // berapa kali tiap baris sudah ada di database
+  const have = new Map();
+  for (const t of existingTxs) {
+    const k = keyOf(t.date, t.item, t.amount, t.type);
+    have.set(k, (have.get(k) || 0) + 1);
+  }
+  const seen = new Map();
   const ops = [];
 
   const catId = (name, type) => {
     const k = `${type}:${name.toLowerCase()}`;
     let id = catMap.get(k);
     if (!id) {
-      const ref = doc(col('categories'));
-      id = ref.id;
+      id = `c-${type}-${hash(name.toLowerCase())}`;
       catMap.set(k, id);
-      ops.push([ref, { name, type }]);
+      ops.push([doc(col('categories'), id), { name, type }]);
     }
     return id;
   };
@@ -87,10 +108,9 @@ export async function commitImport(rows, cats, methods, existingTxs) {
     const k = name.toLowerCase();
     let id = methodMap.get(k);
     if (!id) {
-      const ref = doc(col('methods'));
-      id = ref.id;
+      id = `m-${hash(k)}`;
       methodMap.set(k, id);
-      ops.push([ref, { name }]);
+      ops.push([doc(col('methods'), id), { name }]);
     }
     return id;
   };
@@ -98,9 +118,13 @@ export async function commitImport(rows, cats, methods, existingTxs) {
   let added = 0, skipped = 0;
   const base = Date.now();
   rows.forEach((r, i) => {
-    // baris yang sudah ada di database dilewati (aman jika import dua kali)
-    if (existing.has(keyOf(r.date, r.item, r.amount, r.type))) { skipped++; return; }
-    ops.push([doc(col('transactions')), {
+    const k = keyOf(r.date, r.item, r.amount, r.type);
+    const n = (seen.get(k) || 0) + 1; // baris kembar ke-n di file ini
+    seen.set(k, n);
+    // lewati hanya jika database sudah punya sebanyak itu; baris kembar yang sah tetap masuk
+    if ((have.get(k) || 0) >= n) { skipped++; return; }
+
+    ops.push([doc(col('transactions'), `i-${hash(k)}-${n}`), {
       date: r.date,
       item: r.item,
       amount: r.amount,
@@ -115,11 +139,16 @@ export async function commitImport(rows, cats, methods, existingTxs) {
     added++;
   });
 
-  // Firestore membatasi 500 operasi per batch
-  for (let i = 0; i < ops.length; i += 400) {
+  // batch kecil + batas waktu, supaya tidak menggantung selamanya
+  const SIZE = 200;
+  for (let i = 0; i < ops.length; i += SIZE) {
     const batch = writeBatch(db);
-    ops.slice(i, i + 400).forEach(([ref, data]) => batch.set(ref, data));
-    await batch.commit();
+    ops.slice(i, i + SIZE).forEach(([ref, data]) => batch.set(ref, data));
+    await Promise.race([
+      batch.commit(),
+      timeout(30000, 'Server tidak merespons. Data tersimpan sementara di perangkat ini dan akan terkirim otomatis saat koneksi pulih.'),
+    ]);
+    onProgress(Math.min(i + SIZE, ops.length), ops.length);
   }
   return { added, skipped };
 }
