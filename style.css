@@ -1,0 +1,12 @@
+[x-cloak] { display: none !important; }
+
+html, body { min-height: 100%; }
+
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  padding-top: env(safe-area-inset-top);
+}
+
+input, button, select { font: inherit; }
+button { cursor: pointer; }

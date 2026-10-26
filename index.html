@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Keuangan</title>
+  <meta name="theme-color" content="#10b981" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="apple-touch-icon" href="/icons/192.png" />
+  <link rel="stylesheet" href="/style.css" />
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js" crossorigin="anonymous"></script>
+  <!-- app.js harus SEBELUM Alpine supaya listener 'alpine:init' sudah terpasang -->
+  <script type="module" src="/app.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js" crossorigin="anonymous"></script>
+</head>
+
+<body x-data="app" x-cloak class="bg-slate-50 text-slate-900">
+
+  
+  <!-- ============ APLIKASI ============ -->
+  <div class="mx-auto min-h-dvh max-w-md pb-28">
+
+    <div x-show="!online" class="bg-amber-100 px-4 py-1 text-center text-xs text-amber-800">
+      Offline — perubahan akan disinkronkan saat online
+    </div>
+
+    <!-- Pemilih periode (Beranda, Statistik, Rencana) -->
+    <div x-show="['home','stats','plans'].includes(route)" class="flex items-center justify-between px-3 py-3">
+      <button @click="shift(-1)" :disabled="index<=0" class="p-2 text-xl disabled:opacity-25">‹</button>
+      <div class="text-center">
+        <div class="text-sm font-semibold" x-text="periodLabel(period)"></div>
+        <div class="text-[11px] text-slate-400">Periode gajian</div>
+      </div>
+      <button @click="shift(1)" :disabled="index>=periods.length-1" class="p-2 text-xl disabled:opacity-25">›</button>
+    </div>
+
+    <!-- ============ BERANDA ============ -->
+    <section x-show="route==='home'">
+      <div class="mx-4 rounded-3xl bg-gradient-to-br from-emerald-500 to-teal-600 p-5 text-white shadow-lg">
+        <p class="text-sm opacity-80">Sisa periode ini</p>
+        <p class="mt-1 text-3xl font-bold" x-text="rupiah(income-expense)"></p>
+        <div class="mt-4 grid grid-cols-2 gap-3 text-sm">
+          <div><p class="opacity-80">Pemasukan</p><p class="font-semibold" x-text="rupiah(income)"></p></div>
+          <div><p class="opacity-80">Pengeluaran</p><p class="font-semibold" x-text="rupiah(expense)"></p></div>
+        </div>
+      </div>
+
+      <div class="px-4 pt-4">
+        <input x-model="q" @input.debounce.250ms="limit=150; recompute()" placeholder="Cari transaksi…"
+          class="w-full rounded-xl bg-slate-200/60 px-4 py-2.5 text-sm outline-none" />
+      </div>
+
+      <p x-show="groups.length===0" class="px-6 py-16 text-center text-sm text-slate-400">
+        Belum ada transaksi di periode ini. Tekan tombol + untuk mencatat.
+      </p>
+
+      <template x-for="g in groups" :key="g.date">
+        <section class="mt-4">
+          <div class="flex justify-between px-5 pb-1 text-xs font-medium text-slate-500">
+            <span x-text="fmtDate(g.date,{weekday:'long',day:'numeric',month:'short'})"></span>
+            <span x-text="rupiah(g.expense)"></span>
+          </div>
+          <div class="mx-4 divide-y divide-slate-100 overflow-hidden rounded-2xl bg-white shadow-sm">
+            <template x-for="t in g.items" :key="t.id">
+              <button @click="go('/add/'+t.id)" class="flex w-full items-center gap-3 px-4 py-3 text-left">
+                <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold text-slate-600"
+                  x-text="catName(t.categoryId).slice(0,1).toUpperCase()"></span>
+                <span class="min-w-0 flex-1">
+                  <span class="block truncate font-medium" x-text="t.item"></span>
+                  <span class="block truncate text-xs text-slate-400"
+                    x-text="catName(t.categoryId) + (t.note ? ' · '+t.note : '') + (t.isSalary ? ' · Awal periode' : '')"></span>
+                </span>
+                <span class="shrink-0 font-semibold" :class="t.type==='income' ? 'text-emerald-600' : 'text-rose-500'"
+                  x-text="(t.type==='income' ? '+' : '-') + rupiah(t.amount)"></span>
+              </button>
+            </template>
+          </div>
+        </section>
+      </template>
+
+      <button x-show="hasMore" @click="more()" class="mx-auto mt-4 block rounded-xl bg-slate-200 px-4 py-2 text-sm">
+        Tampilkan lebih banyak
+      </button>
+    </section>
+
+    <!-- ============ STATISTIK ============ -->
+    <section x-show="route==='stats'">
+      <div class="mx-4 grid grid-cols-2 rounded-xl bg-slate-200 p-1 text-sm">
+        <button @click="setStats('expense')" class="rounded-lg py-2 font-medium"
+          :class="statsType==='expense' ? 'bg-white shadow-sm' : 'text-slate-500'">Pengeluaran</button>
+        <button @click="setStats('income')" class="rounded-lg py-2 font-medium"
+          :class="statsType==='income' ? 'bg-white shadow-sm' : 'text-slate-500'">Pemasukan</button>
+      </div>
+
+      <p x-show="statsData.length===0" class="p-16 text-center text-sm text-slate-400">Belum ada data.</p>
+
+      <div x-show="statsData.length>0">
+        <div class="relative mx-4 mt-4 h-56 rounded-3xl bg-white p-3 shadow-sm">
+          <canvas id="donut"></canvas>
+          <div class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+            <span class="text-xs text-slate-400">Total</span>
+            <span class="font-bold" x-text="rupiah(statsTotal)"></span>
+          </div>
+        </div>
+
+        <div class="mx-4 mt-4 space-y-4 rounded-2xl bg-white p-4 shadow-sm">
+          <template x-for="(d,i) in statsData" :key="d.name">
+            <div>
+              <div class="flex items-center justify-between text-sm">
+                <span class="flex items-center gap-2">
+                  <span class="h-3 w-3 rounded-full" :style="`background:${color(i)}`"></span>
+                  <span x-text="d.name"></span>
+                  <span class="text-xs text-slate-400" x-text="Math.round(d.value/statsTotal*100)+'%'"></span>
+                </span>
+                <span class="font-medium" x-text="rupiah(d.value)"></span>
+              </div>
+              <div class="mt-1.5 h-1.5 rounded-full bg-slate-100">
+                <div class="h-full rounded-full" :style="`width:${d.value/statsTotal*100}%;background:${color(i)}`"></div>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ RENCANA BELANJA ============ -->
+    <section x-show="route==='plans'">
+      <div class="mx-4 rounded-2xl bg-white p-4 shadow-sm">
+        <div class="flex items-end justify-between">
+          <p class="font-semibold">Rencana belanja</p>
+          <p class="text-sm text-slate-500" x-text="planDone+' dari '+planList.length+' terbeli'"></p>
+        </div>
+        <div class="mt-3 h-2 rounded-full bg-slate-100">
+          <div class="h-full rounded-full bg-emerald-500 transition-all"
+            :style="`width:${planList.length ? planDone/planList.length*100 : 0}%`"></div>
+        </div>
+        <p class="mt-3 text-xs text-slate-400" x-text="'Estimasi '+rupiah(planEst)+' · Terealisasi '+rupiah(planReal)"></p>
+      </div>
+
+      <div class="mx-4 mt-3 flex gap-2">
+        <input x-model="newPlan.name" @keydown.enter="addPlan()" placeholder="Mau beli apa?"
+          class="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-emerald-500" />
+        <input inputmode="numeric" :value="newPlan.est" placeholder="Estimasi"
+          @input="newPlan.est = fmtNum(parseNum($event.target.value)); $event.target.value = newPlan.est"
+          @keydown.enter="addPlan()"
+          class="w-28 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-emerald-500" />
+        <button @click="addPlan()" class="rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-white">+</button>
+      </div>
+
+      <button x-show="index>0" @click="copyPrev()" class="mx-4 mt-3 text-xs text-emerald-600 underline">
+        Salin item yang belum terbeli dari periode sebelumnya
+      </button>
+
+      <div class="mx-4 mt-4 divide-y divide-slate-100 overflow-hidden rounded-2xl bg-white shadow-sm">
+        <p x-show="planList.length===0" class="p-8 text-center text-sm text-slate-400">Belum ada rencana di periode ini.</p>
+        <template x-for="i in planList" :key="i.id">
+          <div class="flex items-center gap-3 px-4 py-3">
+            <button @click="togglePlan(i)"
+              class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold"
+              :class="i.done ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-slate-300 text-transparent'">✓</button>
+            <div class="min-w-0 flex-1">
+              <p class="truncate" :class="i.done ? 'text-slate-400 line-through' : ''" x-text="i.name"></p>
+              <p class="text-xs text-slate-400"
+                x-text="i.done && realOf(i) ? 'Terbeli '+rupiah(realOf(i)) : (i.estimate ? 'Estimasi '+rupiah(i.estimate) : '')"></p>
+            </div>
+            <button @click="delPlan(i)" class="p-1 text-slate-300">🗑</button>
+          </div>
+        </template>
+      </div>
+    </section>
+
+    <!-- ============ PENGATURAN ============ -->
+    <section x-show="route==='settings'" class="space-y-4 p-4">
+      <h1 class="pt-2 text-xl font-bold">Pengaturan</h1>
+      
+      <div class="rounded-2xl bg-white p-4 shadow-sm">
+        <h3 class="font-semibold">Riwayat yang dimuat</h3>
+        <p class="mb-2 text-xs text-slate-400">Makin sedikit makin hemat kuota gratis Firestore. Pilih "Semua" jika ingin melihat data lama.</p>
+        <select :value="history" @change="setHistory($event.target.value)"
+          class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
+          <option value="6">6 bulan terakhir</option>
+          <option value="12">12 bulan terakhir</option>
+          <option value="24">24 bulan terakhir</option>
+          <option value="0">Semua</option>
+        </select>
+      </div>
+
+      <template x-for="s in lists" :key="s.key">
+        <div class="rounded-2xl bg-white p-4 shadow-sm">
+          <h3 class="mb-3 font-semibold" x-text="s.title"></h3>
+          <div class="mb-3 flex flex-wrap gap-2">
+            <template x-for="it in s.items" :key="it.id">
+              <span class="inline-flex items-center gap-1 rounded-full bg-slate-100 py-1 pl-3 pr-1 text-sm">
+                <span x-text="it.name"></span>
+                <button @click="removeFrom(s, it)" class="px-2 text-slate-400">×</button>
+              </span>
+            </template>
+          </div>
+          <form @submit.prevent="addTo(s)" class="flex gap-2">
+            <input x-model="newName[s.key]" placeholder="Tambah baru…"
+              class="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-emerald-500" />
+            <button class="rounded-xl bg-slate-800 px-4 text-sm text-white">Tambah</button>
+          </form>
+        </div>
+      </template>
+
+      <div class="rounded-2xl bg-white p-4 shadow-sm">
+        <h3 class="font-semibold">Import dari spreadsheet (CSV)</h3>
+        <p class="mb-3 text-xs text-slate-400">
+          Header: tanggal, item, kategori, nominal, tipe, keterangan, metode pembayaran. Baris yang sudah ada otomatis dilewati.
+        </p>
+        <input type="file" accept=".csv" @change="onFile($event)" class="text-sm" />
+        <p x-show="importMsg" x-text="importMsg" class="mt-2 text-sm text-emerald-700"></p>
+
+        <div x-show="preview" class="mt-3">
+          <p class="mb-2 text-sm"
+            x-text="preview ? preview.length+' baris terbaca, '+preview.filter(r=>r.isSalary).length+' terdeteksi gaji, '+previewBad+' baris tidak valid. Contoh 5 baris:' : ''"></p>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+              <template x-for="r in (preview||[]).slice(0,5)">
+                <tr class="border-t border-slate-100">
+                  <td class="py-1 pr-2" x-text="r.date"></td>
+                  <td class="pr-2" x-text="r.item"></td>
+                  <td class="pr-2" x-text="r.category"></td>
+                  <td class="pr-2" x-text="rupiah(r.amount)"></td>
+                  <td x-text="r.type==='income' ? 'masuk' : 'keluar'"></td>
+                </tr>
+              </template>
+            </table>
+          </div>
+          <div class="mt-3 flex gap-2">
+            <button @click="doImport()" :disabled="busy"
+              class="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+              x-text="busy ? 'Mengimpor…' : 'Import sekarang'"></button>
+            <button @click="preview=null" class="rounded-xl bg-slate-100 px-4 py-2 text-sm">Batal</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="rounded-2xl bg-white p-4 shadow-sm">
+        <h3 class="mb-2 font-semibold">Backup</h3>
+        <button @click="exportAll()" class="rounded-xl bg-slate-100 px-4 py-2 text-sm">Unduh transaksi (CSV)</button>
+      </div>
+    </section>
+
+    <!-- ============ TAMBAH / EDIT TRANSAKSI ============ -->
+    <section x-show="route==='add'" class="fixed inset-0 z-20 overflow-y-auto bg-white pb-28">
+      <div class="mx-auto max-w-md">
+        <header class="flex items-center justify-between px-3 py-3">
+          <button @click="go(form.planItemId ? '/plans' : '/')" class="p-2 text-xl">✕</button>
+          <h1 class="font-semibold" x-text="form.id ? 'Edit transaksi' : 'Transaksi baru'"></h1>
+          <span class="w-10"></span>
+        </header>
+
+        <div class="mx-4 grid grid-cols-2 rounded-xl bg-slate-100 p-1 text-sm">
+          <button @click="setType('expense')" class="rounded-lg py-2 font-medium"
+            :class="form.type==='expense' ? 'bg-white shadow-sm' : 'text-slate-500'">Pengeluaran</button>
+          <button @click="setType('income')" class="rounded-lg py-2 font-medium"
+            :class="form.type==='income' ? 'bg-white shadow-sm' : 'text-slate-500'">Pemasukan</button>
+        </div>
+
+        <div class="flex items-baseline justify-center gap-2 px-6 py-8">
+          <span class="text-xl text-slate-400">Rp</span>
+          <input inputmode="numeric" placeholder="0" :value="fmtNum(form.amount)"
+            @input="form.amount = parseNum($event.target.value); $event.target.value = fmtNum(form.amount)"
+            class="w-full max-w-[14rem] bg-transparent text-center text-4xl font-bold outline-none"
+            :class="form.type==='income' ? 'text-emerald-600' : 'text-rose-500'" />
+        </div>
+
+        <div class="space-y-5 px-4">
+          <div>
+            <p class="mb-2 text-xs font-medium text-slate-400">Kategori</p>
+            <div class="flex flex-wrap gap-2">
+              <template x-for="c in catList" :key="c.id">
+                <button @click="pickCat(c)" :class="chip(c.id===effCat)" x-text="c.name"></button>
+              </template>
+            </div>
+          </div>
+
+          <input x-model="form.item" placeholder="Nama item (opsional)"
+            class="w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-emerald-500" />
+
+          <div>
+            <p class="mb-2 text-xs font-medium text-slate-400">Metode pembayaran</p>
+            <div class="flex flex-wrap gap-2">
+              <template x-for="m in methods" :key="m.id">
+                <button @click="form.methodId=m.id" :class="chip(m.id===effMethod)" x-text="m.name"></button>
+              </template>
+            </div>
+          </div>
+
+          <input type="date" x-model="form.date"
+            class="w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-emerald-500" />
+          <input x-model="form.note" placeholder="Keterangan (opsional)"
+            class="w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-emerald-500" />
+
+          <label x-show="form.type==='income'" class="flex items-start gap-3 rounded-xl bg-emerald-50 p-4 text-sm">
+            <input type="checkbox" x-model="form.isSalary" class="mt-1 h-4 w-4" />
+            <span><b>Ini gaji / awal periode baru</b><br />
+              <span class="text-slate-500">Periode berjalan dihitung mulai tanggal ini.</span></span>
+          </label>
+
+          <button x-show="form.id" @click="deleteTx()" class="w-full py-2 text-sm text-rose-500">Hapus transaksi</button>
+        </div>
+
+        <div class="fixed inset-x-0 bottom-0 mx-auto max-w-md bg-white p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+          <button @click="saveForm()" class="w-full rounded-2xl bg-emerald-500 py-3.5 font-semibold text-white">Simpan</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ NAVIGASI BAWAH ============ -->
+    <nav x-show="route!=='add'"
+      class="fixed bottom-0 left-1/2 z-10 w-full max-w-md -translate-x-1/2 border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)]">
+      <div class="grid grid-cols-5 items-center text-center text-[11px]">
+        <a href="#/" class="py-2.5" :class="route==='home' ? 'text-emerald-600' : 'text-slate-400'">
+          <div class="text-xl">🏠</div>Beranda</a>
+        <a href="#/stats" class="py-2.5" :class="route==='stats' ? 'text-emerald-600' : 'text-slate-400'">
+          <div class="text-xl">📊</div>Statistik</a>
+        <a href="#/add" aria-label="Tambah transaksi"
+          class="-mt-6 mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500 text-3xl text-white shadow-lg">+</a>
+        <a href="#/plans" class="py-2.5" :class="route==='plans' ? 'text-emerald-600' : 'text-slate-400'">
+          <div class="text-xl">📝</div>Rencana</a>
+        <a href="#/settings" class="py-2.5" :class="route==='settings' ? 'text-emerald-600' : 'text-slate-400'">
+          <div class="text-xl">⚙️</div>Pengaturan</a>
+      </div>
+    </nav>
+  </div>
+</body>
+</html>
