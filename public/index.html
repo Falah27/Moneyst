@@ -108,7 +108,8 @@
             <div class="w-28 shrink-0 rounded-2xl bg-white p-3 text-center shadow-sm">
               <div class="relative mx-auto h-14 w-14 rounded-full"
                 :style="`background:conic-gradient(${color(i)} ${c.pct}%, #e2e8f0 0)`">
-                <div class="absolute inset-1.5 flex items-center justify-center rounded-full bg-white text-base" x-text="icon(c.name)"></div>
+                <div class="absolute inset-1.5 flex items-center justify-center rounded-full bg-white text-xl"
+                  :style="`color:${color(i)}`" x-html="icon(c.name)"></div>
               </div>
               <p class="mt-2 truncate text-xs font-medium" x-text="c.name"></p>
               <p class="text-[11px] text-slate-400" x-text="c.pct + '% - ' + short(c.value)"></p>
@@ -159,8 +160,8 @@
             <div class="divide-y divide-slate-100">
               <template x-for="t in g.items" :key="t.id">
                 <button @click="t._legacyPair ? null : go('/add/'+t.id)" class="flex w-full items-center gap-3 py-2.5 text-left">
-                  <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-lg"
-                    x-text="isXfer(t) ? '\u21c4' : icon(catName(t.categoryId))"></span>
+                  <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-xl text-blue-600"
+                    x-html="txIcon(t)"></span>
                   <span class="min-w-0 flex-1">
                     <span class="block truncate font-medium" x-text="isXfer(t) ? catLabel(t) : t.item"></span>
                     <span class="block truncate text-xs text-slate-400"
@@ -235,7 +236,7 @@
             <div>
               <div class="flex items-center justify-between text-sm">
                 <span class="flex items-center gap-2">
-                  <span class="text-base" x-text="icon(d.name)"></span>
+                  <span class="flex text-lg text-slate-500" x-html="icon(d.name)"></span>
                   <span x-text="d.name"></span>
                   <span class="text-xs text-slate-400" x-text="Math.round(d.value/statsTotal*100)+'%'"></span>
                 </span>
@@ -341,7 +342,9 @@
               <p class="text-xs text-slate-400"
                 x-text="i.done && realOf(i) ? 'Terbeli '+rupiah(realOf(i)) : (i.estimate ? 'Estimasi '+rupiah(i.estimate) : '')"></p>
             </div>
-            <button @click="delPlan(i)" class="p-1 text-slate-300" aria-label="Hapus rencana">&#128465;</button>
+            <button @click="delPlan(i)" class="p-1 text-slate-300" aria-label="Hapus rencana">
+              <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+            </button>
           </div>
         </template>
       </div>
@@ -469,7 +472,10 @@
             <p class="mb-2 text-xs font-medium text-slate-400">Kategori</p>
             <div class="flex flex-wrap gap-2">
               <template x-for="c in catList" :key="c.id">
-                <button @click="pickCat(c)" :class="chip(c.id===effCat)" x-text="icon(c.name) + ' ' + c.name"></button>
+                <button @click="pickCat(c)" :class="chip(c.id===effCat)" class="inline-flex items-center gap-1.5">
+                  <span class="flex text-base" x-html="icon(c.name)"></span>
+                  <span x-text="c.name"></span>
+                </button>
               </template>
             </div>
           </div>

@@ -30,15 +30,25 @@ const blankForm = () => ({
 let unsubs = [];
 const charts = {}; // sengaja di luar Alpine agar tidak dibungkus proxy
 
+const svg = p =>
+  `<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="display:block">${p}</svg>`;
 const ICONS = [
-  [/makan|resto|food/i, '🍽️'], [/jajan|snack|kopi|minum/i, '🧋'],
-  [/transport|bensin|ojek|parkir/i, '🚗'], [/belanja|shop/i, '🛒'],
-  [/tagihan|listrik|pulsa|internet|cicil|pdam/i, '🧾'], [/sehat|obat|medis/i, '💊'],
-  [/hibur|game|film|nonton/i, '🎬'], [/amal|sedekah|donasi|zakat/i, '🤲'],
-  [/gaji|salary/i, '💼'], [/hadiah|bonus|angpao/i, '🎁'],
-  [/hutang|utang|piutang/i, '🤝'], [/transfer/i, '⇄'], [/lain/i, '📦'],
+  [/makan|resto|food/i, '<path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/>'],
+  [/jajan|snack|kopi|minum/i, '<path d="M10 2v2"/><path d="M14 2v2"/><path d="M6 2v2"/><path d="M16 8a1 1 0 0 1 1 1v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1h14a4 4 0 1 1 0 8h-1"/>'],
+  [/transport|bensin|ojek|parkir/i, '<path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/>'],
+  [/belanja|shop/i, '<circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/>'],
+  [/tagihan|listrik|pulsa|internet|cicil|pdam/i, '<path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 17.5v-11"/>'],
+  [/sehat|obat|medis/i, '<path d="M8 3h8v5h5v8h-5v5H8v-5H3V8h5z"/>'],
+  [/hibur|game|film|nonton/i, '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 3v18"/><path d="M3 7.5h4"/><path d="M3 12h18"/><path d="M3 16.5h4"/><path d="M17 3v18"/><path d="M17 7.5h4"/><path d="M17 16.5h4"/>'],
+  [/amal|sedekah|donasi|zakat/i, '<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>'],
+  [/gaji|salary/i, '<path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><rect width="20" height="14" x="2" y="6" rx="2"/>'],
+  [/hadiah|bonus|angpao/i, '<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13"/><path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"/><path d="M7.5 8a2.5 2.5 0 0 1 0-5A4.8 8 0 0 1 12 8a4.8 8 0 0 1 4.5-5 2.5 2.5 0 0 1 0 5"/>'],
+  [/hutang|utang|piutang|transfer/i, '<path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/>'],
+  [/saving|tabung|invest/i, '<path d="M22 7 13.5 15.5l-5-5L2 17"/><path d="M16 7h6v6"/>'],
+  [/lain/i, '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>'],
 ];
-const iconOf = name => (ICONS.find(([re]) => re.test(name)) || [])[1] || (name || '?').slice(0, 1).toUpperCase();
+const TAG_ICON = '<path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/>';
+const iconOf = name => svg((ICONS.find(([re]) => re.test(name || '')) || [])[1] || TAG_ICON);
 const short = n => (n >= 1e6 ? +(n / 1e6).toFixed(1) + 'jt' : n >= 1e3 ? Math.round(n / 1e3) + 'rb' : String(n));
 const TARGET_SAVE = 20;
 const healthOf = rate =>
@@ -216,6 +226,7 @@ document.addEventListener('alpine:init', () => {
         .sort((a, b) => a.localeCompare(b, 'id'));
     },
     isXfer(t) { return !!(t.isTransfer && t.toMethodId); },
+    txIcon(t) { return iconOf(this.isXfer(t) ? 'transfer' : this.catName(t.categoryId)); },
     mergeLegacyTransfers(items) {
       const byKey = new Map();
       const paired = new Set();
