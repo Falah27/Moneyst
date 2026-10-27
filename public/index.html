@@ -88,7 +88,7 @@
           </div>
           <div class="mx-4 divide-y divide-slate-100 overflow-hidden rounded-2xl bg-white shadow-sm">
             <template x-for="t in g.items" :key="t.id">
-              <button @click="go('/add/'+t.id)" class="flex w-full items-center gap-3 px-4 py-3 text-left">
+              <button @click="t._legacyPair ? null : go('/add/'+t.id)" class="flex w-full items-center gap-3 px-4 py-3 text-left">
                 <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold text-slate-600"
                   x-text="isXfer(t) ? '⇄' : catName(t.categoryId).slice(0,1).toUpperCase()"></span>
                 <span class="min-w-0 flex-1">

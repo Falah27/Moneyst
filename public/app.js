@@ -159,7 +159,7 @@ document.addEventListener('alpine:init', () => {
       this.hasMore = list.length > this.limit;
 
       const map = new Map();
-      for (const t of list.slice(0, this.limit)) {
+      for (const t of this.mergeLegacyTransfers(list).slice(0, this.limit)) {
         if (!map.has(t.date)) map.set(t.date, { date: t.date, items: [], expense: 0 });
         const g = map.get(t.date);
         g.items.push(t);
@@ -180,6 +180,44 @@ document.addEventListener('alpine:init', () => {
     catName(id) { return this.cats.find(c => c.id === id)?.name ?? '—'; },
     methodName(id) { return this.methods.find(m => m.id === id)?.name ?? '—'; },
     isXfer(t) { return !!(t.isTransfer && t.toMethodId); },
+    mergeLegacyTransfers(items) {
+      const byKey = new Map();
+      const paired = new Set();
+      const result = [];
+
+      for (const t of items) {
+        if (!t.isTransfer || t.toMethodId) {
+          result.push(t);
+          continue;
+        }
+        const key = `${t.date}|${t.amount}|${t.note || ''}`;
+        const pair = byKey.get(key);
+        if (!pair) {
+          byKey.set(key, t);
+          result.push(t);
+          continue;
+        }
+        if (pair.type === t.type || paired.has(pair.id)) {
+          result.push(t);
+          continue;
+        }
+
+        const outgoing = pair.type === 'expense' ? pair : t;
+        const incoming = pair.type === 'income' ? pair : t;
+        const index = result.indexOf(pair);
+        result[index] = {
+          ...outgoing,
+          id: `legacy-transfer-${outgoing.id}-${incoming.id}`,
+          methodId: outgoing.methodId,
+          toMethodId: incoming.methodId,
+          item: '',
+          _legacyPair: true,
+        };
+        paired.add(pair.id);
+        paired.add(t.id);
+      }
+      return result.filter(t => !paired.has(t.id) || t._legacyPair);
+    },
     catLabel(t) {
       return this.isXfer(t)
         ? `${this.methodName(t.methodId)} → ${this.methodName(t.toMethodId)}`
