@@ -2,6 +2,7 @@ const CACHE = 'keuangan';
 const FILES = ['/', '/style.css', '/app.js', '/db.js', '/utils.js', '/csv.js', '/manifest.json'];
 const CDN_HOSTS = ['cdn.tailwindcss.com', 'cdn.jsdelivr.net'];
 const TIMEOUT = 3000;
+const APP_SHELL = new Set(FILES);
 
 self.addEventListener('install', e => {
   e.waitUntil(
@@ -25,7 +26,7 @@ self.addEventListener('fetch', e => {
   const url = new URL(req.url);
   if (url.origin === location.origin) {
     if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/cdn-cgi/')) return;
-    e.respondWith(networkFirst(req));
+    e.respondWith(APP_SHELL.has(url.pathname) ? staleWhileRevalidate(req) : networkFirst(req));
   }
   else if (CDN_HOSTS.includes(url.hostname)) e.respondWith(staleWhileRevalidate(req));
 });

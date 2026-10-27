@@ -118,7 +118,7 @@ document.addEventListener('alpine:init', () => {
       window.addEventListener('online', () => (this.online = true));
       window.addEventListener('offline', () => (this.online = false));
       window.addEventListener('moneyst:sync', e => {
-        this.pending = !!e.detail?.pending;
+        this.pending = !!e.detail?.pending && (e.detail?.outboxCount || 0) > 0;
         this.outboxCount = e.detail?.outboxCount || 0;
         if (e.detail?.ok) this.syncAt = e.detail.at;
         if (e.detail?.error) this.syncErr = e.detail.error;
