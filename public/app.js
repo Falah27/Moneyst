@@ -6,6 +6,10 @@ import {
 import { parseCsv, commitImport, exportCsv } from './csv.js';
 
 const COLORS = ['#2563eb', '#f97316', '#ec4899', '#10b981', '#8b5cf6', '#f59e0b', '#06b6d4', '#ef4444', '#64748b'];
+const WALLET_COLORS = [
+  ['#2563eb', '#60a5fa'], ['#7c3aed', '#c084fc'], ['#059669', '#34d399'],
+  ['#db2777', '#f472b6'], ['#ea580c', '#fb923c'], ['#0891b2', '#22d3ee'],
+];
 
 const DEFAULT_CATS = [
   ['exp-makan', 'Makan', 'expense'], ['exp-jajan', 'Jajan', 'expense'],
@@ -232,6 +236,13 @@ document.addEventListener('alpine:init', () => {
 
     catName(id) { return this.cats.find(c => c.id === id)?.name ?? '—'; },
     methodName(id) { return this.methods.find(m => m.id === id)?.name ?? '—'; },
+    walletColor(m) {
+      const i = this.methods.findIndex(x => x.id === m.id);
+      return WALLET_COLORS[Math.max(0, i) % WALLET_COLORS.length];
+    },
+    walletInitial(name) {
+      return (name || '?').trim().slice(0, 1).toUpperCase();
+    },
     get filterCats() {
       return [...new Set(this.periodAll.filter(t => !this.isXfer(t)).map(t => this.catName(t.categoryId)))]
         .filter(n => n !== '—')

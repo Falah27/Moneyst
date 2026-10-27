@@ -70,24 +70,36 @@
     <!-- ============ BERANDA ============ -->
     <section x-show="route==='home'">
       <div class="-mt-10 grid grid-cols-2 gap-3 px-4">
-        <div class="rounded-2xl bg-white p-3 shadow-sm">
+        <div class="metric-card rounded-2xl bg-white p-3 shadow-sm">
           <div class="flex items-center justify-between text-xs text-slate-500">Pemasukan <span class="text-emerald-500">&#8599;</span></div>
           <p class="mt-1 font-semibold text-emerald-600" x-text="rupiah(income)"></p>
         </div>
-        <div class="rounded-2xl bg-white p-3 shadow-sm">
+        <div class="metric-card rounded-2xl bg-white p-3 shadow-sm">
           <div class="flex items-center justify-between text-xs text-slate-500">Pengeluaran <span class="text-rose-500">&#8600;</span></div>
           <p class="mt-1 font-semibold text-rose-500" x-text="rupiah(expense)"></p>
         </div>
       </div>
 
       <!-- saldo dompet -->
-      <div x-show="wallets.length" class="mt-5">
-        <p class="px-5 text-sm font-semibold">Saldo dompet</p>
-        <div class="no-scrollbar mt-2 flex gap-3 overflow-x-auto px-4">
+      <div x-show="wallets.length" class="mt-6">
+        <div class="flex items-end justify-between px-5">
+          <div>
+            <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Money pockets</p>
+            <p class="mt-0.5 text-sm font-semibold">Saldo dompet</p>
+          </div>
+          <span class="text-[11px] font-medium text-slate-400" x-text="wallets.length + ' aktif'"></span>
+        </div>
+        <div class="no-scrollbar mt-3 flex gap-3 overflow-x-auto px-4 pb-1">
           <template x-for="m in wallets" :key="m.id">
-            <div class="w-36 shrink-0 rounded-2xl bg-white p-3 shadow-sm">
-              <p class="truncate text-xs text-slate-500" x-text="m.name"></p>
-              <p class="mt-1 text-sm font-semibold" :class="m.bal < 0 ? 'text-rose-500' : ''" x-text="rupiah(m.bal)"></p>
+            <div class="wallet-card w-40 shrink-0 overflow-hidden rounded-[1.35rem] p-3.5 text-white shadow-lg"
+              :style="`--wallet-a:${walletColor(m)[0]};--wallet-b:${walletColor(m)[1]}`">
+              <div class="flex items-start justify-between">
+                <span class="flex h-8 w-8 items-center justify-center rounded-xl bg-white/20 text-xs font-bold"
+                  x-text="walletInitial(m.name)"></span>
+                <span class="rounded-full bg-white/15 px-2 py-1 text-[10px] font-medium">aktif</span>
+              </div>
+              <p class="mt-4 truncate text-xs font-medium text-white/75" x-text="m.name"></p>
+              <p class="mt-1 text-base font-bold tracking-tight" :class="m.bal < 0 ? 'text-rose-100' : ''" x-text="rupiah(m.bal)"></p>
             </div>
           </template>
         </div>
@@ -528,7 +540,7 @@
             <p class="mb-2 text-xs font-medium text-slate-400">Kategori</p>
             <div class="flex flex-wrap gap-2">
               <template x-for="c in catList" :key="c.id">
-                <button @click="pickCat(c)" :class="chip(c.id===effCat)" class="inline-flex items-center gap-1.5">
+                <button @click="pickCat(c)" :class="chip(c.id===effCat) + ' inline-flex items-center gap-1.5'">
                   <span class="flex text-base" x-html="icon(c.name)"></span>
                   <span x-text="c.name"></span>
                 </button>
