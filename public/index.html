@@ -92,9 +92,9 @@
                 <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold text-slate-600"
                   x-text="isXfer(t) ? '⇄' : catName(t.categoryId).slice(0,1).toUpperCase()"></span>
                 <span class="min-w-0 flex-1">
-                  <span class="block truncate font-medium" x-text="t.item"></span>
+                  <span class="block truncate font-medium" x-text="isXfer(t) ? catLabel(t) : t.item"></span>
                   <span class="block truncate text-xs text-slate-400"
-                    x-text="catLabel(t) + (t.note ? ' · '+t.note : '') + (t.isSalary ? ' · Awal periode' : '')"></span>
+                    x-text="(isXfer(t) ? '' : catLabel(t)) + (t.note ? ' · '+t.note : '') + (t.isSalary ? ' · Awal periode' : '')"></span>
                 </span>
                 <span class="shrink-0 font-semibold"
                   :class="isXfer(t) ? 'text-slate-500' : (t.type==='income' ? 'text-emerald-600' : 'text-rose-500')"
