@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="id">
 <head>
   <meta charset="utf-8" />
@@ -26,8 +26,8 @@
     <span class="rounded-full px-3 py-1 text-[11px] shadow"
       :class="syncErr ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'">
       <span x-show="syncErr" x-text="'Gagal sinkron: ' + syncErr"></span>
-      <span x-show="!syncErr && !online">Offline 窶・perubahan disinkronkan saat online</span>
-      <span x-show="!syncErr && online && pending">Menunggu data terkirim ke server窶ｦ</span>
+      <span x-show="!syncErr && !online">Offline &mdash; perubahan disinkronkan saat online</span>
+      <span x-show="!syncErr && online && pending">Menunggu data terkirim ke server&hellip;</span>
     </span>
   </div>
 
@@ -37,12 +37,12 @@
     <header x-show="['home','stats','plans'].includes(route)"
       class="pt-safe rounded-b-[2rem] bg-gradient-to-b from-blue-600 to-blue-500 px-4 pb-14 text-white">
       <div class="flex items-center justify-between rounded-full bg-white/15 p-1">
-        <button @click="shift(-1)" :disabled="index<=0" class="h-9 w-9 rounded-full text-xl disabled:opacity-30">窶ｹ</button>
+        <button @click="shift(-1)" :disabled="index<=0" class="h-9 w-9 rounded-full text-xl disabled:opacity-30">&lsaquo;</button>
         <div class="text-center leading-tight">
           <div class="text-sm font-semibold" x-text="periodLabel(period)"></div>
           <div class="text-[10px] opacity-70">Periode gajian</div>
         </div>
-        <button @click="shift(1)" :disabled="index>=periods.length-1" class="h-9 w-9 rounded-full text-xl disabled:opacity-30">窶ｺ</button>
+        <button @click="shift(1)" :disabled="index>=periods.length-1" class="h-9 w-9 rounded-full text-xl disabled:opacity-30">&rsaquo;</button>
       </div>
 
       <div x-show="route==='home'" class="mt-5">
@@ -71,11 +71,11 @@
     <section x-show="route==='home'">
       <div class="-mt-10 grid grid-cols-2 gap-3 px-4">
         <div class="rounded-2xl bg-white p-3 shadow-sm">
-          <div class="flex items-center justify-between text-xs text-slate-500">Pemasukan <span class="text-emerald-500">竊・/span></div>
+          <div class="flex items-center justify-between text-xs text-slate-500">Pemasukan <span class="text-emerald-500">&#8599;</span></div>
           <p class="mt-1 font-semibold text-emerald-600" x-text="rupiah(income)"></p>
         </div>
         <div class="rounded-2xl bg-white p-3 shadow-sm">
-          <div class="flex items-center justify-between text-xs text-slate-500">Pengeluaran <span class="text-rose-500">竊・/span></div>
+          <div class="flex items-center justify-between text-xs text-slate-500">Pengeluaran <span class="text-rose-500">&#8600;</span></div>
           <p class="mt-1 font-semibold text-rose-500" x-text="rupiah(expense)"></p>
         </div>
       </div>
@@ -94,7 +94,8 @@
       </div>
       <a x-show="methods.length && !wallets.length" href="#/settings"
         class="mx-4 mt-5 block rounded-2xl bg-white p-3 text-center text-xs text-blue-600 shadow-sm">
-        Atur saldo dompet di Pengaturan 竊・      </a>
+        Atur saldo dompet di Pengaturan &rarr;
+      </a>
 
       <!-- pengeluaran teratas (nanti diganti anggaran per kategori) -->
       <div x-show="topCats.length" class="mt-5">
@@ -124,7 +125,7 @@
         </div>
 
         <div class="mt-3 flex gap-2">
-          <input x-model="q" @input.debounce.250ms="limit=150; recompute()" placeholder="Cari transaksi窶ｦ"
+          <input x-model="q" @input.debounce.250ms="limit=150; recompute()" placeholder="Cari transaksi&hellip;"
             class="min-w-0 flex-1 rounded-xl bg-slate-100 px-4 py-2.5 text-sm outline-none" />
           <select x-model="fMethod" @change="limit=150; recompute()"
             class="w-28 rounded-xl bg-slate-100 px-2 text-sm text-slate-600 outline-none">
@@ -334,13 +335,13 @@
           <div class="flex items-center gap-3 px-4 py-3">
             <button @click="togglePlan(i)"
               class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold"
-              :class="i.done ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300 text-transparent'">笨・/button>
+              :class="i.done ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300 text-transparent'">&#10003;</button>
             <div class="min-w-0 flex-1">
               <p class="truncate" :class="i.done ? 'text-slate-400 line-through' : ''" x-text="i.name"></p>
               <p class="text-xs text-slate-400"
                 x-text="i.done && realOf(i) ? 'Terbeli '+rupiah(realOf(i)) : (i.estimate ? 'Estimasi '+rupiah(i.estimate) : '')"></p>
             </div>
-            <button @click="delPlan(i)" class="p-1 text-slate-300">卵</button>
+            <button @click="delPlan(i)" class="p-1 text-slate-300" aria-label="Hapus rencana">&#128465;</button>
           </div>
         </template>
       </div>
@@ -386,12 +387,12 @@
             <template x-for="it in s.items" :key="it.id">
               <span class="inline-flex items-center gap-1 rounded-full bg-slate-100 py-1 pl-3 pr-1 text-sm">
                 <span x-text="it.name"></span>
-                <button @click="removeFrom(s, it)" class="px-2 text-slate-400">ﾃ・/button>
+                <button @click="removeFrom(s, it)" class="px-2 text-slate-400" aria-label="Hapus">&#10005;</button>
               </span>
             </template>
           </div>
           <form @submit.prevent="addTo(s)" class="flex gap-2">
-            <input x-model="newName[s.key]" placeholder="Tambah baru窶ｦ"
+            <input x-model="newName[s.key]" placeholder="Tambah baru&hellip;"
               class="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-500" />
             <button class="rounded-xl bg-slate-800 px-4 text-sm text-white">Tambah</button>
           </form>
@@ -425,7 +426,7 @@
           <div class="mt-3 flex gap-2">
             <button @click="doImport()" :disabled="busy"
               class="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-              x-text="busy ? 'Mengimpor窶ｦ' : 'Import sekarang'"></button>
+              x-text="busy ? 'Mengimpor&hellip;' : 'Import sekarang'"></button>
             <button @click="preview=null" class="rounded-xl bg-slate-100 px-4 py-2 text-sm">Batal</button>
           </div>
         </div>
@@ -441,7 +442,7 @@
     <section x-show="route==='add'" class="fixed inset-0 z-20 overflow-y-auto bg-white pb-28 pt-[env(safe-area-inset-top)]">
       <div class="mx-auto max-w-md">
         <header class="flex items-center justify-between px-3 py-3">
-          <button @click="go(form.planItemId ? '/plans' : '/')" class="p-2 text-xl">笨・/button>
+          <button @click="go(form.planItemId ? '/plans' : '/')" class="p-2 text-xl">&#10005;</button>
           <h1 class="font-semibold" x-text="form.id ? 'Edit transaksi' : 'Transaksi baru'"></h1>
           <span class="w-10"></span>
         </header>
