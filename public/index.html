@@ -91,14 +91,10 @@
         </div>
         <div class="no-scrollbar mt-3 flex gap-3 overflow-x-auto px-4 pb-1">
           <template x-for="m in wallets" :key="m.id">
-            <div class="wallet-card w-40 shrink-0 overflow-hidden rounded-[1.35rem] p-3.5 text-white shadow-lg"
+            <div class="wallet-card w-40 shrink-0 overflow-hidden rounded-[1.35rem] p-3 text-white shadow-lg"
               :style="`--wallet-a:${walletColor(m)[0]};--wallet-b:${walletColor(m)[1]}`">
-              <div class="flex items-start justify-between">
-                <span class="flex h-8 w-8 items-center justify-center rounded-xl bg-white/20 text-xs font-bold"
-                  x-text="walletInitial(m.name)"></span>
-                <span class="rounded-full bg-white/15 px-2 py-1 text-[10px] font-medium">aktif</span>
-              </div>
-              <p class="mt-4 truncate text-xs font-medium text-white/75" x-text="m.name"></p>
+              <span class="rounded-full bg-white/15 px-2 py-1 text-[10px] font-medium">aktif</span>
+              <p class="mt-3 truncate text-xs font-medium text-white/75" x-text="m.name"></p>
               <p class="mt-1 text-base font-bold tracking-tight" :class="m.bal < 0 ? 'text-rose-100' : ''" x-text="rupiah(m.bal)"></p>
             </div>
           </template>

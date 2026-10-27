@@ -240,9 +240,6 @@ document.addEventListener('alpine:init', () => {
       const i = this.methods.findIndex(x => x.id === m.id);
       return WALLET_COLORS[Math.max(0, i) % WALLET_COLORS.length];
     },
-    walletInitial(name) {
-      return (name || '?').trim().slice(0, 1).toUpperCase();
-    },
     get filterCats() {
       return [...new Set(this.periodAll.filter(t => !this.isXfer(t)).map(t => this.catName(t.categoryId)))]
         .filter(n => n !== '—')
@@ -300,7 +297,9 @@ document.addEventListener('alpine:init', () => {
       return covered ? (m.openingBalance || 0) + this.netSince(m.id, m.openingDate) : (m.balance || 0);
     },
     get wallets() {
-      return this.methods.filter(m => m.openingDate).map(m => ({ ...m, bal: this.methodBal(m) }));
+      return this.methods.filter(m => m.openingDate)
+        .map(m => ({ ...m, bal: this.methodBal(m) }))
+        .sort((a, b) => b.bal - a.bal);
     },
     get walletTotal() { return this.wallets.reduce((s, m) => s + m.bal, 0); },
 
