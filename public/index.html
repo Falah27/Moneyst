@@ -53,6 +53,24 @@
         </div>
       </div>
 
+      <div x-show="methods.length" class="mx-4 mt-3 rounded-2xl bg-white p-4 shadow-sm">
+        <div class="flex items-baseline justify-between">
+          <p class="text-sm font-semibold">Saldo dompet</p>
+          <p class="text-sm font-semibold" x-text="rupiah(walletTotal)"></p>
+        </div>
+        <p x-show="wallets.length===0" class="mt-2 text-xs text-slate-400">
+          Belum diatur. Buka Pengaturan → Saldo dompet.
+        </p>
+        <div class="mt-1 divide-y divide-slate-100">
+          <template x-for="m in wallets" :key="m.id">
+            <div class="flex justify-between py-1.5 text-sm">
+              <span x-text="m.name"></span>
+              <span :class="(m.balance||0) < 0 ? 'text-rose-500' : ''" x-text="rupiah(m.balance || 0)"></span>
+            </div>
+          </template>
+        </div>
+      </div>
+
       <div class="px-4 pt-4">
         <input x-model="q" @input.debounce.250ms="limit=150; recompute()" placeholder="Cari transaksi…"
           class="w-full rounded-xl bg-slate-200/60 px-4 py-2.5 text-sm outline-none" />
@@ -72,14 +90,15 @@
             <template x-for="t in g.items" :key="t.id">
               <button @click="go('/add/'+t.id)" class="flex w-full items-center gap-3 px-4 py-3 text-left">
                 <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold text-slate-600"
-                  x-text="catName(t.categoryId).slice(0,1).toUpperCase()"></span>
+                  x-text="isXfer(t) ? '⇄' : catName(t.categoryId).slice(0,1).toUpperCase()"></span>
                 <span class="min-w-0 flex-1">
                   <span class="block truncate font-medium" x-text="t.item"></span>
                   <span class="block truncate text-xs text-slate-400"
-                    x-text="catName(t.categoryId) + (t.note ? ' · '+t.note : '') + (t.isSalary ? ' · Awal periode' : '')"></span>
+                    x-text="catLabel(t) + (t.note ? ' · '+t.note : '') + (t.isSalary ? ' · Awal periode' : '')"></span>
                 </span>
-                <span class="shrink-0 font-semibold" :class="t.type==='income' ? 'text-emerald-600' : 'text-rose-500'"
-                  x-text="(t.type==='income' ? '+' : '-') + rupiah(t.amount)"></span>
+                <span class="shrink-0 font-semibold"
+                  :class="isXfer(t) ? 'text-slate-500' : (t.type==='income' ? 'text-emerald-600' : 'text-rose-500')"
+                  x-text="(isXfer(t) ? '' : (t.type==='income' ? '+' : '-')) + rupiah(t.amount)"></span>
               </button>
             </template>
           </div>
@@ -180,7 +199,24 @@
     <!-- ============ PENGATURAN ============ -->
     <section x-show="route==='settings'" class="space-y-4 p-4">
       <h1 class="pt-2 text-xl font-bold">Pengaturan</h1>
-      
+
+      <div class="rounded-2xl bg-white p-4 shadow-sm">
+        <h3 class="font-semibold">Saldo dompet</h3>
+        <p class="mb-3 text-xs text-slate-400">Ketuk "Atur" lalu isi saldo dompet saat ini. Transaksi setelah itu otomatis menambah atau mengurangi saldo.</p>
+        <div class="divide-y divide-slate-100">
+          <template x-for="m in methods" :key="m.id">
+            <div class="flex items-center justify-between py-2 text-sm">
+              <div class="min-w-0">
+                <p class="truncate" x-text="m.name"></p>
+                <p class="text-xs text-slate-400"
+                  x-text="m.openingDate ? rupiah(m.balance || 0) + ' · sejak ' + fmtDate(m.openingDate) : 'Belum diatur'"></p>
+              </div>
+              <button @click="setWallet(m)" class="rounded-lg bg-slate-100 px-3 py-1.5 text-xs">Atur</button>
+            </div>
+          </template>
+        </div>
+      </div>
+
       <div class="rounded-2xl bg-white p-4 shadow-sm">
         <h3 class="font-semibold">Riwayat yang dimuat</h3>
         <p class="mb-2 text-xs text-slate-400">Makin sedikit makin hemat kuota gratis Firestore. Pilih "Semua" jika ingin melihat data lama.</p>
@@ -260,11 +296,13 @@
           <span class="w-10"></span>
         </header>
 
-        <div class="mx-4 grid grid-cols-2 rounded-xl bg-slate-100 p-1 text-sm">
+        <div class="mx-4 grid grid-cols-3 rounded-xl bg-slate-100 p-1 text-sm">
           <button @click="setType('expense')" class="rounded-lg py-2 font-medium"
             :class="form.type==='expense' ? 'bg-white shadow-sm' : 'text-slate-500'">Pengeluaran</button>
           <button @click="setType('income')" class="rounded-lg py-2 font-medium"
             :class="form.type==='income' ? 'bg-white shadow-sm' : 'text-slate-500'">Pemasukan</button>
+          <button @click="setType('transfer')" class="rounded-lg py-2 font-medium"
+            :class="form.type==='transfer' ? 'bg-white shadow-sm' : 'text-slate-500'">Transfer</button>
         </div>
 
         <div class="flex items-baseline justify-center gap-2 px-6 py-8">
@@ -272,11 +310,11 @@
           <input inputmode="numeric" placeholder="0" :value="fmtNum(form.amount)"
             @input="form.amount = parseNum($event.target.value); $event.target.value = fmtNum(form.amount)"
             class="w-full max-w-[14rem] bg-transparent text-center text-4xl font-bold outline-none"
-            :class="form.type==='income' ? 'text-emerald-600' : 'text-rose-500'" />
+            :class="form.type==='income' ? 'text-emerald-600' : form.type==='transfer' ? 'text-indigo-500' : 'text-rose-500'" />
         </div>
 
         <div class="space-y-5 px-4">
-          <div>
+          <div x-show="form.type!=='transfer'">
             <p class="mb-2 text-xs font-medium text-slate-400">Kategori</p>
             <div class="flex flex-wrap gap-2">
               <template x-for="c in catList" :key="c.id">
@@ -289,11 +327,21 @@
             class="w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-emerald-500" />
 
           <div>
-            <p class="mb-2 text-xs font-medium text-slate-400">Metode pembayaran</p>
+            <p class="mb-2 text-xs font-medium text-slate-400"
+              x-text="form.type==='transfer' ? 'Dari dompet' : 'Metode pembayaran'"></p>
             <div class="flex flex-wrap gap-2">
               <template x-for="m in methods" :key="m.id">
                 <button @click="form.methodId=m.id" :class="chip(m.id===effMethod)" x-text="m.name"></button>
               </template>
+            </div>
+
+            <div x-show="form.type==='transfer'">
+              <p class="mb-2 text-xs font-medium text-slate-400">Ke dompet</p>
+              <div class="flex flex-wrap gap-2">
+                <template x-for="m in methods.filter(x => x.id !== effMethod)" :key="m.id">
+                  <button @click="form.toMethodId=m.id" :class="chip(m.id===effTo)" x-text="m.name"></button>
+                </template>
+              </div>
             </div>
           </div>
 

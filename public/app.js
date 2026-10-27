@@ -23,7 +23,7 @@ const DEFAULT_METHODS = [
 const byName = (a, b) => a.name.localeCompare(b.name, 'id');
 const blankForm = () => ({
   id: null, type: 'expense', amount: 0, item: '', categoryId: '',
-  methodId: localStorage.getItem('lastMethod') || '',
+  methodId: localStorage.getItem('lastMethod') || '', toMethodId: '',
   date: todayISO(), note: '', isSalary: false, planItemId: null, loaded: true,
 });
 
@@ -178,17 +178,58 @@ document.addEventListener('alpine:init', () => {
     more() { this.limit += 150; this.recompute(); },
 
     catName(id) { return this.cats.find(c => c.id === id)?.name ?? '—'; },
+    methodName(id) { return this.methods.find(m => m.id === id)?.name ?? '—'; },
+    isXfer(t) { return !!(t.isTransfer && t.toMethodId); },
+    catLabel(t) {
+      return this.isXfer(t)
+        ? `${this.methodName(t.methodId)} → ${this.methodName(t.toMethodId)}`
+        : this.catName(t.categoryId);
+    },
+
+    get wallets() { return this.methods.filter(m => m.openingDate); },
+    get walletTotal() { return this.wallets.reduce((s, m) => s + (m.balance || 0), 0); },
+
+    netSince(id, from) {
+      let n = 0;
+      for (const t of this.txs) {
+        if (t.date < from) continue;
+        if (this.isXfer(t)) {
+          if (t.methodId === id) n -= t.amount;
+          if (t.toMethodId === id) n += t.amount;
+        } else if (t.methodId === id) {
+          n += t.type === 'income' ? t.amount : -t.amount;
+        }
+      }
+      return n;
+    },
+
+    setWallet(m) {
+      const s = prompt(`Saldo ${m.name} sekarang (Rp)?`, m.openingDate ? String(m.balance || 0) : '');
+      if (s === null) return;
+      if (!/\d/.test(s)) return alert('Isi dengan angka ya');
+      const now = (s.trim().startsWith('-') ? -1 : 1) * parseNum(s);
+      const today = todayISO();
+      updateDoc(doc(col('methods'), m.id), {
+        openingBalance: now - this.netSince(m.id, today), openingDate: today, balance: now,
+      }).catch(e => this.fail(e));
+    },
 
     // =============== form tambah / edit ===============
     get catList() { return this.cats.filter(c => c.type === this.form.type); },
     get effCat() { return this.catList.some(c => c.id === this.form.categoryId) ? this.form.categoryId : this.catList[0]?.id; },
     get effMethod() { return this.methods.some(m => m.id === this.form.methodId) ? this.form.methodId : this.methods[0]?.id; },
+    get effTo() {
+      const ok = this.methods.some(m => m.id === this.form.toMethodId && m.id !== this.effMethod);
+      return ok ? this.form.toMethodId : this.methods.find(m => m.id !== this.effMethod)?.id;
+    },
 
     openForm(id, sp) {
       if (id) {
         const t = this.txs.find(x => x.id === id);
         this.form = t
-          ? { ...blankForm(), ...t, note: t.note || '', isSalary: !!t.isSalary, planItemId: null, loaded: true }
+          ? { ...blankForm(), ...t,
+              type: t.isTransfer && t.toMethodId ? 'transfer' : t.type, toMethodId: t.toMethodId || '',
+              note: t.note || '', isSalary: !!t.isSalary, planItemId: null, loaded: true }
           : { ...blankForm(), id, loaded: false }; // data belum tiba, diisi ulang nanti
         return;
       }
@@ -210,10 +251,15 @@ document.addEventListener('alpine:init', () => {
 
     saveForm() {
       const f = this.form;
+      const transfer = f.type === 'transfer';
       if (!f.amount) return alert('Isi nominal dulu ya');
       if (!f.date) return alert('Tanggal belum diisi');
-      const categoryId = this.effCat, methodId = this.effMethod;
-      if (!categoryId || !methodId) return alert('Kategori atau metode bayar belum tersedia');
+      const methodId = this.effMethod;
+      const toMethodId = transfer ? this.effTo : null;
+      const categoryId = transfer ? null : this.effCat;
+      if (!methodId) return alert('Metode bayar belum tersedia');
+      if (transfer && !toMethodId) return alert('Transfer butuh minimal 2 dompet');
+      if (!transfer && !categoryId) return alert('Kategori belum tersedia');
 
       localStorage.setItem('lastMethod', methodId);
       const ref = f.id ? doc(col('transactions'), f.id) : doc(col('transactions'));
@@ -226,13 +272,13 @@ document.addEventListener('alpine:init', () => {
 
       setDoc(ref, {
         date: f.date,
-        item: f.item.trim() || this.catName(categoryId),
-        categoryId, methodId,
+        item: f.item.trim() || (transfer ? 'Transfer' : this.catName(categoryId)),
+        categoryId, methodId, toMethodId,
         amount: f.amount,
-        type: f.type,
+        type: transfer ? 'expense' : f.type,
         note: f.note.trim(),
         isSalary,
-        isTransfer: old?.isTransfer ?? false, // jangan hilangkan penanda transfer saat edit
+        isTransfer: transfer || (!!old?.isTransfer && !old?.toMethodId),
         createdAt: old?.createdAt ?? Date.now(),
       }).catch(e => this.fail(e));
 

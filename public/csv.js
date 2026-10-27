@@ -164,11 +164,11 @@ export function exportCsv(txs, cats, methods) {
     .map(t => ({
       Tanggal: t.date,
       Item: t.item,
-      Kategori: cn.get(t.categoryId) || '',
+      Kategori: t.isTransfer && !t.categoryId ? 'Transfer Internal' : (cn.get(t.categoryId) || ''),
       Nominal: t.amount,
       Tipe: t.type === 'income' ? 'Pemasukan' : 'Pengeluaran',
       Status: /belum lunas/i.test(t.note || '') ? 'Belum Lunas' : 'Lunas',
-      Keterangan: t.note || '',
+      Keterangan: [t.note, t.toMethodId ? '→ ' + (mn.get(t.toMethodId) || '') : ''].filter(Boolean).join(' | '),
       'Metode Pembayaran': mn.get(t.methodId) || '',
     }));
   const blob = new Blob(['\ufeff' + Papa.unparse(rows)], { type: 'text/csv;charset=utf-8' });

@@ -7,12 +7,18 @@ const SCHEMAS = {
       date: 'date', item: 'item', categoryId: 'category_id', methodId: 'method_id',
       amount: 'amount', type: 'type', note: 'note',
       isSalary: 'is_salary', isTransfer: 'is_transfer', createdAt: 'created_at',
+      toMethodId: 'to_method_id',
     },
     bool: ['isSalary', 'isTransfer'],
+    defaults: { note: '' },
     req: ['date', 'item', 'amount', 'type'],
   },
   categories: { table: 'categories', stamp: false, cols: { name: 'name', type: 'type' }, bool: [], req: ['name', 'type'] },
-  methods: { table: 'methods', stamp: false, cols: { name: 'name' }, bool: [], req: ['name'] },
+  methods: {
+    table: 'methods', stamp: false,
+    cols: { name: 'name', openingBalance: 'opening_balance', openingDate: 'opening_date' },
+    bool: [], defaults: { openingBalance: 0 }, req: ['name'],
+  },
   planItems: {
     table: 'plan_items', stamp: true,
     cols: {
@@ -24,6 +30,22 @@ const SCHEMAS = {
   },
 };
 const NAMES = Object.keys(SCHEMAS);
+const METHODS_WITH_BALANCE = `
+SELECT m.*,
+  COALESCE(m.opening_balance, 0)
+  + COALESCE((
+      SELECT SUM(CASE
+        WHEN t.is_transfer = 1 AND t.to_method_id IS NOT NULL THEN -t.amount
+        WHEN t.type = 'income' THEN t.amount
+        ELSE -t.amount END)
+      FROM transactions t
+      WHERE t.method_id = m.id AND t.date >= COALESCE(m.opening_date, '0000-01-01')), 0)
+  + COALESCE((
+      SELECT SUM(t.amount) FROM transactions t
+      WHERE t.is_transfer = 1 AND t.to_method_id = m.id
+        AND t.date >= COALESCE(m.opening_date, '0000-01-01')), 0)
+  AS balance
+FROM methods m`;
 const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
 const bad = msg => Object.assign(new Error(msg), { status: 400 });
 const json = (data, status = 200) =>
@@ -31,7 +53,7 @@ const json = (data, status = 200) =>
 
 function encode(s, k, v) {
   if (s.bool.includes(k)) return v ? 1 : 0;
-  if (v === undefined || v === null) return k === 'note' ? '' : null;
+  if (v === undefined || v === null) return s.defaults && has(s.defaults, k) ? s.defaults[k] : null;
   if (typeof v !== 'string' && typeof v !== 'number') throw bad(`nilai ${k} tidak valid`);
   return v;
 }
@@ -39,6 +61,7 @@ function encode(s, k, v) {
 function decode(s, r) {
   const d = { id: r.id };
   for (const [k, c] of Object.entries(s.cols)) d[k] = s.bool.includes(k) ? !!r[c] : r[c];
+  if (r.balance !== undefined) d.balance = r.balance;
   return d;
 }
 
@@ -86,7 +109,7 @@ async function getData(url, env) {
   const res = await env.DB.batch([
     tx,
     env.DB.prepare('SELECT * FROM categories'),
-    env.DB.prepare('SELECT * FROM methods'),
+    env.DB.prepare(METHODS_WITH_BALANCE),
     env.DB.prepare('SELECT * FROM plan_items'),
   ]);
   const out = {};
