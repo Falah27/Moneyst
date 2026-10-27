@@ -219,6 +219,10 @@ document.addEventListener('alpine:init', () => {
       const ref = f.id ? doc(col('transactions'), f.id) : doc(col('transactions'));
       const old = f.id ? this.txs.find(t => t.id === f.id) : null;
       const isSalary = f.type === 'income' && f.isSalary;
+      if (old?.isSalary && (!isSalary || old.date !== f.date)) {
+        const i = this.periods.findIndex(p => p.start === old.date);
+        this.relocatePlans(old.date, isSalary ? f.date : this.periods[i - 1]?.start);
+      }
 
       setDoc(ref, {
         date: f.date,
@@ -243,6 +247,11 @@ document.addEventListener('alpine:init', () => {
     deleteTx() {
       const id = this.form.id;
       if (!id || !confirm('Hapus transaksi ini?')) return;
+      const old = this.txs.find(t => t.id === id);
+      if (old?.isSalary) {
+        const i = this.periods.findIndex(p => p.start === old.date);
+        this.relocatePlans(old.date, this.periods[i - 1]?.start);
+      }
       this.planItems
         .filter(p => p.transactionId === id)
         .forEach(p => updateDoc(doc(col('planItems'), p.id), { done: false, transactionId: null }).catch(e => this.fail(e)));
@@ -283,6 +292,14 @@ document.addEventListener('alpine:init', () => {
     },
 
     delPlan(i) { deleteDoc(doc(col('planItems'), i.id)).catch(e => this.fail(e)); },
+
+    relocatePlans(from, to) {
+      if (!to || from === to) return;
+      this.planItems
+        .filter(p => p.periodStart === from)
+        .forEach(p => updateDoc(doc(col('planItems'), p.id), { periodStart: to })
+          .catch(e => this.fail(e)));
+    },
 
     copyPrev() {
       const prev = this.periods[this.index - 1];
