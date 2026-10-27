@@ -39,6 +39,23 @@ button:disabled { cursor: default; }
 }
 .wallet-card > * { position: relative; z-index: 1; }
 
+.period-switcher {
+  backdrop-filter: blur(12px);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.12);
+}
+.period-button {
+  min-width: 2.75rem;
+  justify-content: center;
+  background: rgba(255,255,255,.12);
+  transition: background .18s ease, transform .18s ease, opacity .18s ease;
+}
+.period-button:not(:disabled):hover {
+  background: rgba(255,255,255,.22);
+}
+.period-button:not(:disabled):active {
+  transform: scale(.95);
+}
+
 .metric-card {
   border: 1px solid rgba(226, 232, 240, .8);
   transition: transform .2s ease, box-shadow .2s ease;
