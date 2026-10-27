@@ -1,4 +1,4 @@
-import { col, doc, setDoc, updateDoc, deleteDoc, query, where, onSnapshot, getDocs } from './firebase.js';
+import { col, doc, setDoc, updateDoc, deleteDoc, query, where, onSnapshot, getDocs } from './db.js';
 import {
   rupiah, parseNum, todayISO, monthsAgoISO, fmtDate, periodLabel,
   buildPeriods, inPeriod, defaultIndex,

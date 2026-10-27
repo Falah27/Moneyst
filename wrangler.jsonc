@@ -1,0 +1,13 @@
+{
+  "name": "moneyst",
+  "main": "src/worker.js",
+  "compatibility_date": "2025-10-01",
+  "assets": { "directory": "./public", "binding": "ASSETS" },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "moneyst",
+      "database_id": "1477c91a-b55e-4c57-8163-c443b4eb73ee"
+    }
+  ]
+}

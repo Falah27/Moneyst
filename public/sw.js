@@ -1,9 +1,6 @@
 const CACHE = 'keuangan';
-const FILES = [
-  '/', '/index.html', '/style.css', '/app.js', '/firebase.js', '/config.js',
-  '/utils.js', '/csv.js', '/manifest.json',
-];
-const CDN_HOSTS = ['cdn.tailwindcss.com', 'cdn.jsdelivr.net', 'www.gstatic.com'];
+const FILES = ['/', '/style.css', '/app.js', '/db.js', '/utils.js', '/csv.js', '/manifest.json'];
+const CDN_HOSTS = ['cdn.tailwindcss.com', 'cdn.jsdelivr.net'];
 const TIMEOUT = 3000;
 
 self.addEventListener('install', e => {
@@ -26,7 +23,10 @@ self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
-  if (url.origin === location.origin) e.respondWith(networkFirst(req));
+  if (url.origin === location.origin) {
+    if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/cdn-cgi/')) return;
+    e.respondWith(networkFirst(req));
+  }
   else if (CDN_HOSTS.includes(url.hostname)) e.respondWith(staleWhileRevalidate(req));
 });
 
@@ -50,7 +50,7 @@ async function networkFirst(req) {
   if (cached) return cached;
   try { return await network; }
   catch {
-    return req.mode === 'navigate' ? (await cache.match('/index.html')) || Response.error() : Response.error();
+    return req.mode === 'navigate' ? (await cache.match('/')) || Response.error() : Response.error();
   }
 }
 

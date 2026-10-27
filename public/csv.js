@@ -1,4 +1,4 @@
-import { db, col, doc, writeBatch } from './firebase.js';
+import { db, col, doc, writeBatch } from './db.js';
 import { todayISO } from './utils.js';
 
 const toInt = s => parseInt(String(s ?? '').split(',')[0].replace(/[^\d]/g, ''), 10) || 0; // "Rp 25.000" -> 25000
@@ -146,7 +146,7 @@ export async function commitImport(rows, cats, methods, existingTxs, onProgress 
   const SIZE = 200;
   for (let i = 0; i < ops.length; i += SIZE) {
     const batch = writeBatch(db);
-    ops.slice(i, i + SIZE).forEach(([ref, data]) => batch.set(ref, data));
+    ops.slice(i, i + SIZE).forEach(([ref, data]) => batch.create(ref, data));
     await Promise.race([
       batch.commit(),
       timeout(30000, 'Server tidak merespons. Data tersimpan sementara di perangkat ini dan akan terkirim otomatis saat koneksi pulih.'),
