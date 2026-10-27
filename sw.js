@@ -1,12 +1,17 @@
-const CACHE = 'keuangan-v3'; // naikkan jadi v2, v3, ... setiap kali kamu mengubah file aplikasi
+const CACHE = 'keuangan';
 const FILES = [
   '/', '/index.html', '/style.css', '/app.js', '/firebase.js', '/config.js',
   '/utils.js', '/csv.js', '/manifest.json', '/icons/192.png', '/icons/512.png',
 ];
 const CDN_HOSTS = ['cdn.tailwindcss.com', 'cdn.jsdelivr.net', 'www.gstatic.com'];
+const TIMEOUT = 3000;
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
+  e.waitUntil(
+    caches.open(CACHE)
+      .then(c => c.addAll(FILES.map(f => new Request(f, { cache: 'reload' }))))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener('activate', e => {
@@ -21,12 +26,34 @@ self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
-  const allowed = url.origin === location.origin || CDN_HOSTS.includes(url.hostname);
-  if (!allowed) return; // firestore.googleapis.com dll. lewat jaringan biasa
-  e.respondWith(staleWhileRevalidate(req));
+  if (url.origin === location.origin) e.respondWith(networkFirst(req));
+  else if (CDN_HOSTS.includes(url.hostname)) e.respondWith(staleWhileRevalidate(req));
 });
 
-// tampilkan cache dulu (cepat & offline), sambil memperbarui cache di belakang layar
+async function networkFirst(req) {
+  const cache = await caches.open(CACHE);
+  const network = fetch(req, { cache: 'no-cache' }).then(res => {
+    if (res.ok) cache.put(req, res.clone());
+    return res;
+  });
+  network.catch(() => {});
+
+  try {
+    const res = await Promise.race([
+      network,
+      new Promise(r => setTimeout(() => r(null), TIMEOUT)),
+    ]);
+    if (res) return res;
+  } catch { }
+
+  const cached = await cache.match(req, { ignoreSearch: true });
+  if (cached) return cached;
+  try { return await network; }
+  catch {
+    return req.mode === 'navigate' ? (await cache.match('/index.html')) || Response.error() : Response.error();
+  }
+}
+
 async function staleWhileRevalidate(req) {
   const cache = await caches.open(CACHE);
   const cached = await cache.match(req);
@@ -36,6 +63,5 @@ async function staleWhileRevalidate(req) {
       return res;
     })
     .catch(() => null);
-  if (cached) return cached;
-  return (await network) || (req.mode === 'navigate' ? cache.match('/index.html') : Response.error());
+  return cached || (await network) || Response.error();
 }

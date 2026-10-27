@@ -1,4 +1,5 @@
 import { db, col, doc, writeBatch } from './firebase.js';
+import { todayISO } from './utils.js';
 
 const toInt = s => parseInt(String(s ?? '').split(',')[0].replace(/[^\d]/g, ''), 10) || 0; // "Rp 25.000" -> 25000
 
@@ -92,6 +93,7 @@ export async function commitImport(rows, cats, methods, existingTxs, onProgress 
     have.set(k, (have.get(k) || 0) + 1);
   }
   const seen = new Map();
+  const ids = new Set(existingTxs.map(t => t.id));
   const ops = [];
 
   const catId = (name, type) => {
@@ -122,9 +124,10 @@ export async function commitImport(rows, cats, methods, existingTxs, onProgress 
     const n = (seen.get(k) || 0) + 1; // baris kembar ke-n di file ini
     seen.set(k, n);
     // lewati hanya jika database sudah punya sebanyak itu; baris kembar yang sah tetap masuk
-    if ((have.get(k) || 0) >= n) { skipped++; return; }
+    const id = `i-${hash(k)}-${n}`;
+    if ((have.get(k) || 0) >= n || ids.has(id)) { skipped++; return; }
 
-    ops.push([doc(col('transactions'), `i-${hash(k)}-${n}`), {
+    ops.push([doc(col('transactions'), id), {
       date: r.date,
       item: r.item,
       amount: r.amount,
@@ -171,7 +174,7 @@ export function exportCsv(txs, cats, methods) {
   const blob = new Blob(['\ufeff' + Papa.unparse(rows)], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `keuangan-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.download = `keuangan-${todayISO()}.csv`;
   a.click();
   URL.revokeObjectURL(a.href);
 }

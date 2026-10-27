@@ -1,7 +1,7 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
-  collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot, query, where, writeBatch,
+  collection, doc, setDoc, updateDoc, deleteDoc, onSnapshot, getDocs, query, where, writeBatch,
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
 import { firebaseConfig, SPACE_ID } from './config.js';
 
@@ -15,4 +15,4 @@ export const db = initializeFirestore(app, {
 // semua data berada di spaces/{SPACE_ID}/{nama}
 export const col = name => collection(db, 'spaces', SPACE_ID, name);
 
-export { doc, setDoc, updateDoc, deleteDoc, onSnapshot, query, where, writeBatch };
+export { doc, setDoc, updateDoc, deleteDoc, onSnapshot, getDocs, query, where, writeBatch };

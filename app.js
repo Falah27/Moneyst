@@ -1,4 +1,4 @@
-import { col, doc, setDoc, updateDoc, deleteDoc, query, where, onSnapshot } from './firebase.js';
+import { col, doc, setDoc, updateDoc, deleteDoc, query, where, onSnapshot, getDocs } from './firebase.js';
 import {
   rupiah, parseNum, todayISO, monthsAgoISO, fmtDate, periodLabel,
   buildPeriods, inPeriod, defaultIndex,
@@ -31,7 +31,8 @@ let unsubs = [];
 let chart = null; // sengaja di luar Alpine agar tidak dibungkus proxy
 
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js'));
+  window.addEventListener('load', () =>
+    navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }));
 }
 
 document.addEventListener('alpine:init', () => {
@@ -78,7 +79,7 @@ document.addEventListener('alpine:init', () => {
 
     listen() {
       this.stop();
-      const err = n => e => console.error('Listener', n, e);
+      const err = n => e => { console.error('Listener', n, e); this.syncErr = e.message; };
 
       const txSource = this.history
         ? query(col('transactions'), where('date', '>=', monthsAgoISO(this.history)))
@@ -94,7 +95,7 @@ document.addEventListener('alpine:init', () => {
           if (this.route === 'add' && this.form.id && !this.form.loaded) this.openForm(this.form.id);
         }, err('transactions')),
 
-        onSnapshot(col('categories'), snap => {
+        onSnapshot(col('categories'), { includeMetadataChanges: true }, snap => {
           this.cats = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort(byName);
           // seed hanya jika SERVER memang kosong (bukan sekadar cache kosong)
           if (!snap.metadata.fromCache && snap.empty) {
@@ -103,7 +104,7 @@ document.addEventListener('alpine:init', () => {
           }
         }, err('categories')),
 
-        onSnapshot(col('methods'), snap => {
+        onSnapshot(col('methods'), { includeMetadataChanges: true }, snap => {
           this.methods = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort(byName);
           if (!snap.metadata.fromCache && snap.empty) {
             DEFAULT_METHODS.forEach(([id, name]) =>
@@ -165,6 +166,7 @@ document.addEventListener('alpine:init', () => {
         if (t.type === 'expense' && !t.isTransfer) g.expense += t.amount;
       }
       this.groups = [...map.values()];
+      if (this.route === 'stats') this.$nextTick(() => this.drawChart());
     },
 
     shift(d) {
@@ -209,6 +211,7 @@ document.addEventListener('alpine:init', () => {
     saveForm() {
       const f = this.form;
       if (!f.amount) return alert('Isi nominal dulu ya');
+      if (!f.date) return alert('Tanggal belum diisi');
       const categoryId = this.effCat, methodId = this.effMethod;
       if (!categoryId || !methodId) return alert('Kategori atau metode bayar belum tersedia');
 
@@ -242,7 +245,7 @@ document.addEventListener('alpine:init', () => {
       if (!id || !confirm('Hapus transaksi ini?')) return;
       this.planItems
         .filter(p => p.transactionId === id)
-        .forEach(p => updateDoc(doc(col('planItems'), p.id), { done: false, transactionId: null }));
+        .forEach(p => updateDoc(doc(col('planItems'), p.id), { done: false, transactionId: null }).catch(e => this.fail(e)));
       deleteDoc(doc(col('transactions'), id)).catch(e => this.fail(e));
       this.go('/');
     },
@@ -275,21 +278,22 @@ document.addEventListener('alpine:init', () => {
     togglePlan(i) {
       if (!i.done) return this.go('/add?planItem=' + i.id); // form terbuka, item tercentang setelah disimpan
       if (!confirm('Batalkan centang? Transaksi terkait ikut dihapus.')) return;
-      if (i.transactionId) deleteDoc(doc(col('transactions'), i.transactionId));
-      updateDoc(doc(col('planItems'), i.id), { done: false, transactionId: null });
+      if (i.transactionId) deleteDoc(doc(col('transactions'), i.transactionId)).catch(e => this.fail(e));
+      updateDoc(doc(col('planItems'), i.id), { done: false, transactionId: null }).catch(e => this.fail(e));
     },
 
-    delPlan(i) { deleteDoc(doc(col('planItems'), i.id)); },
+    delPlan(i) { deleteDoc(doc(col('planItems'), i.id)).catch(e => this.fail(e)); },
 
     copyPrev() {
       const prev = this.periods[this.index - 1];
       if (!prev) return;
+      const exist = new Set(this.planList.map(p => p.name.toLowerCase()));
       this.planItems
-        .filter(i => i.periodStart === prev.start && !i.done)
+        .filter(i => i.periodStart === prev.start && !i.done && !exist.has(i.name.toLowerCase()))
         .forEach((i, n) => setDoc(doc(col('planItems')), {
           periodStart: this.period.start, name: i.name, estimate: i.estimate ?? null,
           done: false, transactionId: null, order: Date.now() + n,
-        }));
+        }).catch(e => this.fail(e)));
     },
 
     // =============== statistik ===============
@@ -300,7 +304,7 @@ document.addEventListener('alpine:init', () => {
           m.set(t.categoryId, (m.get(t.categoryId) || 0) + t.amount);
         }
       }
-      return [...m].map(([id, value]) => ({ name: this.catName(id), value })).sort((a, b) => b.value - a.value);
+      return [...m].map(([id, value]) => ({ id, name: this.catName(id), value })).sort((a, b) => b.value - a.value);
     },
     get statsTotal() {
       return this.periodAll
@@ -340,7 +344,7 @@ document.addEventListener('alpine:init', () => {
     },
     removeFrom(s, item) {
       if (confirm(`Hapus "${item.name}"? Transaksi lama dengan item ini akan tampil "—".`)) {
-        deleteDoc(doc(col(s.col), item.id));
+        deleteDoc(doc(col(s.col), item.id)).catch(e => this.fail(e));
       }
     },
 
@@ -364,7 +368,9 @@ document.addEventListener('alpine:init', () => {
       this.busy = true;
       this.importMsg = 'Menyiapkan…';
       try {
-        const r = await commitImport(this.preview, this.cats, this.methods, this.txs,
+        const snap = await getDocs(col('transactions'));
+        const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const r = await commitImport(this.preview, this.cats, this.methods, all,
           (d, t) => (this.importMsg = `Mengirim ${d} dari ${t}…`));
         this.importMsg = `Selesai: ${r.added} transaksi masuk, ${r.skipped} dilewati (sudah ada).`;
         this.preview = null;
@@ -373,6 +379,14 @@ document.addEventListener('alpine:init', () => {
       }
       this.busy = false;
     },
-    exportAll() { exportCsv(this.txs, this.cats, this.methods); },
+    async exportAll() {
+      if (!navigator.onLine) return alert('Backup butuh koneksi internet.');
+      this.busy = true;
+      try {
+        const snap = await getDocs(col('transactions'));
+        exportCsv(snap.docs.map(d => ({ id: d.id, ...d.data() })), this.cats, this.methods);
+      } catch (e) { alert('Gagal backup: ' + e.message); }
+      this.busy = false;
+    },
   }));
 });

@@ -112,7 +112,7 @@
         </div>
 
         <div class="mx-4 mt-4 space-y-4 rounded-2xl bg-white p-4 shadow-sm">
-          <template x-for="(d,i) in statsData" :key="d.name">
+          <template x-for="(d,i) in statsData" :key="d.id">
             <div>
               <div class="flex items-center justify-between text-sm">
                 <span class="flex items-center gap-2">
@@ -252,7 +252,7 @@
     </section>
 
     <!-- ============ TAMBAH / EDIT TRANSAKSI ============ -->
-    <section x-show="route==='add'" class="fixed inset-0 z-20 overflow-y-auto bg-white pb-28">
+    <section x-show="route==='add'" class="fixed inset-0 z-20 overflow-y-auto bg-white pb-28 pt-[env(safe-area-inset-top)]">
       <div class="mx-auto max-w-md">
         <header class="flex items-center justify-between px-3 py-3">
           <button @click="go(form.planItemId ? '/plans' : '/')" class="p-2 text-xl">✕</button>
