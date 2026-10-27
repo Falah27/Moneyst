@@ -4,8 +4,8 @@
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#f8fafc",
-  "theme_color": "#10b981",
+  "background_color": "#f1f5f9",
+  "theme_color": "#2563eb",
   "shortcuts": [
     { "name": "Catat Pengeluaran", "url": "/#/add" },
     { "name": "Rencana Belanja", "url": "/#/plans" }

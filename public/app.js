@@ -1,11 +1,11 @@
 import { col, doc, setDoc, updateDoc, deleteDoc, query, where, onSnapshot, getDocs } from './db.js';
 import {
   rupiah, parseNum, todayISO, monthsAgoISO, fmtDate, periodLabel,
-  buildPeriods, inPeriod, defaultIndex,
+  buildPeriods, inPeriod, defaultIndex, addDaysISO,
 } from './utils.js';
 import { parseCsv, commitImport, exportCsv } from './csv.js';
 
-const COLORS = ['#10b981', '#6366f1', '#f59e0b', '#ef4444', '#06b6d4', '#8b5cf6', '#ec4899', '#84cc16', '#64748b'];
+const COLORS = ['#2563eb', '#f97316', '#ec4899', '#10b981', '#8b5cf6', '#f59e0b', '#06b6d4', '#ef4444', '#64748b'];
 
 const DEFAULT_CATS = [
   ['exp-makan', 'Makan', 'expense'], ['exp-jajan', 'Jajan', 'expense'],
@@ -28,7 +28,24 @@ const blankForm = () => ({
 });
 
 let unsubs = [];
-let chart = null; // sengaja di luar Alpine agar tidak dibungkus proxy
+const charts = {}; // sengaja di luar Alpine agar tidak dibungkus proxy
+
+const ICONS = [
+  [/makan|resto|food/i, '🍽️'], [/jajan|snack|kopi|minum/i, '🧋'],
+  [/transport|bensin|ojek|parkir/i, '🚗'], [/belanja|shop/i, '🛒'],
+  [/tagihan|listrik|pulsa|internet|cicil|pdam/i, '🧾'], [/sehat|obat|medis/i, '💊'],
+  [/hibur|game|film|nonton/i, '🎬'], [/amal|sedekah|donasi|zakat/i, '🤲'],
+  [/gaji|salary/i, '💼'], [/hadiah|bonus|angpao/i, '🎁'],
+  [/hutang|utang|piutang/i, '🤝'], [/transfer/i, '⇄'], [/lain/i, '📦'],
+];
+const iconOf = name => (ICONS.find(([re]) => re.test(name)) || [])[1] || (name || '?').slice(0, 1).toUpperCase();
+const short = n => (n >= 1e6 ? +(n / 1e6).toFixed(1) + 'jt' : n >= 1e3 ? Math.round(n / 1e3) + 'rb' : String(n));
+const TARGET_SAVE = 20;
+const healthOf = rate =>
+  rate == null ? { t: '—', c: 'bg-slate-100 text-slate-500' }
+  : rate >= TARGET_SAVE ? { t: 'Sehat', c: 'bg-emerald-100 text-emerald-700' }
+  : rate >= 0 ? { t: 'Tipis', c: 'bg-amber-100 text-amber-700' }
+  : { t: 'Defisit', c: 'bg-rose-100 text-rose-700' };
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () =>
@@ -54,17 +71,24 @@ document.addEventListener('alpine:init', () => {
     // ----- UI state -----
     form: blankForm(),
     statsType: 'expense',
+    fCat: '', fMethod: '', filtered: false, fSum: { n: 0, income: 0, expense: 0 },
+    toast: null, toastTimer: null,
+    trendMode: 'period', trendN: 6, trendKind: 'bar',
+    trend: { rows: [], last: null, tiles: [] },
     newPlan: { name: '', est: '' },
     newName: { cx: '', ci: '', m: '' },
     history: Number(localStorage.getItem('historyMonths') ?? 12),
     preview: null, previewBad: 0, importMsg: '',
 
     // helper untuk template
-    rupiah, fmtDate, periodLabel, parseNum,
+    rupiah, fmtDate, periodLabel, parseNum, short, icon: iconOf, health: healthOf,
+    seg: active => `rounded-md px-2.5 py-1 ${active ? 'bg-white font-medium shadow-sm' : 'text-slate-500'}`,
     fmtNum: n => (n ? n.toLocaleString('id-ID') : ''),
     color: i => COLORS[i % COLORS.length],
     chip: active =>
-      `rounded-full px-4 py-2 text-sm ${active ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-600'}`,
+      `rounded-full px-4 py-2 text-sm ${active ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'}`,
+    chipSm: active =>
+      `shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-xs ${active ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'}`,
 
     // =============== lifecycle ===============
     init() {
@@ -153,9 +177,14 @@ document.addEventListener('alpine:init', () => {
       this.expense = real.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
 
       const needle = this.q.trim().toLowerCase();
-      const list = needle
-        ? all.filter(t => `${t.item} ${this.catName(t.categoryId)} ${t.note || ''}`.toLowerCase().includes(needle))
-        : all;
+      let list = all;
+      if (this.fCat) list = list.filter(t => !this.isXfer(t) && this.catName(t.categoryId) === this.fCat);
+      if (this.fMethod) list = list.filter(t => t.methodId === this.fMethod || t.toMethodId === this.fMethod);
+      if (needle) list = list.filter(t => `${t.item} ${this.catLabel(t)} ${t.note || ''}`.toLowerCase().includes(needle));
+      this.filtered = !!(this.fCat || this.fMethod || needle);
+      const sum = { n: list.length, income: 0, expense: 0 };
+      for (const t of list) if (!t.isTransfer) sum[t.type === 'income' ? 'income' : 'expense'] += t.amount;
+      this.fSum = sum;
       this.hasMore = list.length > this.limit;
 
       const map = new Map();
@@ -166,12 +195,14 @@ document.addEventListener('alpine:init', () => {
         if (t.type === 'expense' && !t.isTransfer) g.expense += t.amount;
       }
       this.groups = [...map.values()];
+      this.trend = this.buildTrend();
       if (this.route === 'stats') this.$nextTick(() => this.drawChart());
     },
 
     shift(d) {
       const i = Math.max(0, Math.min(this.periods.length - 1, this.index + d));
       this.sel = i === defaultIndex(this.periods) ? null : i; // null = ikut periode terbaru
+      this.fCat = '';
       this.recompute();
       this.$nextTick(() => this.drawChart());
     },
@@ -179,6 +210,11 @@ document.addEventListener('alpine:init', () => {
 
     catName(id) { return this.cats.find(c => c.id === id)?.name ?? '—'; },
     methodName(id) { return this.methods.find(m => m.id === id)?.name ?? '—'; },
+    get filterCats() {
+      return [...new Set(this.periodAll.filter(t => !this.isXfer(t)).map(t => this.catName(t.categoryId)))]
+        .filter(n => n !== '—')
+        .sort((a, b) => a.localeCompare(b, 'id'));
+    },
     isXfer(t) { return !!(t.isTransfer && t.toMethodId); },
     mergeLegacyTransfers(items) {
       const byKey = new Map();
@@ -224,8 +260,15 @@ document.addEventListener('alpine:init', () => {
         : this.catName(t.categoryId);
     },
 
-    get wallets() { return this.methods.filter(m => m.openingDate); },
-    get walletTotal() { return this.wallets.reduce((s, m) => s + (m.balance || 0), 0); },
+    methodBal(m) {
+      if (!m.openingDate) return null;
+      const covered = !this.history || m.openingDate >= monthsAgoISO(this.history);
+      return covered ? (m.openingBalance || 0) + this.netSince(m.id, m.openingDate) : (m.balance || 0);
+    },
+    get wallets() {
+      return this.methods.filter(m => m.openingDate).map(m => ({ ...m, bal: this.methodBal(m) }));
+    },
+    get walletTotal() { return this.wallets.reduce((s, m) => s + m.bal, 0); },
 
     netSince(id, from) {
       let n = 0;
@@ -242,7 +285,7 @@ document.addEventListener('alpine:init', () => {
     },
 
     setWallet(m) {
-      const s = prompt(`Saldo ${m.name} sekarang (Rp)?`, m.openingDate ? String(m.balance || 0) : '');
+      const s = prompt(`Saldo ${m.name} sekarang (Rp)?`, m.openingDate ? String(this.methodBal(m)) : '');
       if (s === null) return;
       if (!/\d/.test(s)) return alert('Isi dengan angka ya');
       const now = (s.trim().startsWith('-') ? -1 : 1) * parseNum(s);
@@ -330,17 +373,39 @@ document.addEventListener('alpine:init', () => {
 
     deleteTx() {
       const id = this.form.id;
-      if (!id || !confirm('Hapus transaksi ini?')) return;
       const old = this.txs.find(t => t.id === id);
-      if (old?.isSalary) {
+      if (!id || !old) return;
+      if (old.isSalary) {
+        if (!confirm('Ini transaksi gaji (awal periode). Hapus?')) return;
         const i = this.periods.findIndex(p => p.start === old.date);
         this.relocatePlans(old.date, this.periods[i - 1]?.start);
       }
-      this.planItems
-        .filter(p => p.transactionId === id)
-        .forEach(p => updateDoc(doc(col('planItems'), p.id), { done: false, transactionId: null }).catch(e => this.fail(e)));
+      const plans = this.planItems.filter(p => p.transactionId === id).map(p => p.id);
+      plans.forEach(pid => updateDoc(doc(col('planItems'), pid), { done: false, transactionId: null })
+        .catch(e => this.fail(e)));
       deleteDoc(doc(col('transactions'), id)).catch(e => this.fail(e));
       this.go('/');
+
+      if (!old.isSalary) {
+        this.showToast('Transaksi dihapus', () => {
+          const { id: _omit, ...data } = old;
+          setDoc(doc(col('transactions'), id), data).catch(e => this.fail(e));
+          plans.forEach(pid => updateDoc(doc(col('planItems'), pid), { done: true, transactionId: id })
+            .catch(e => this.fail(e)));
+        });
+      }
+    },
+
+    showToast(msg, undo) {
+      clearTimeout(this.toastTimer);
+      this.toast = { msg, undo };
+      this.toastTimer = setTimeout(() => (this.toast = null), 7000);
+    },
+    runUndo() {
+      const u = this.toast?.undo;
+      clearTimeout(this.toastTimer);
+      this.toast = null;
+      u?.();
     },
 
     // =============== rencana belanja ===============
@@ -398,35 +463,175 @@ document.addEventListener('alpine:init', () => {
     },
 
     // =============== statistik ===============
-    get statsData() {
+    catTotals(type) {
       const m = new Map();
       for (const t of this.periodAll) {
-        if (t.type === this.statsType && !t.isTransfer) {
-          m.set(t.categoryId, (m.get(t.categoryId) || 0) + t.amount);
+        if (t.type === type && !t.isTransfer) {
+          const name = this.catName(t.categoryId);
+          m.set(name, (m.get(name) || 0) + t.amount);
         }
       }
-      return [...m].map(([id, value]) => ({ id, name: this.catName(id), value })).sort((a, b) => b.value - a.value);
+      return [...m].map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
     },
-    get statsTotal() {
-      return this.periodAll
-        .filter(t => t.type === this.statsType && !t.isTransfer)
-        .reduce((s, t) => s + t.amount, 0);
+    get statsData() { return this.catTotals(this.statsType); },
+    get statsTotal() { return this.statsData.reduce((s, d) => s + d.value, 0); },
+
+    get topCats() {
+      const d = this.catTotals('expense');
+      const total = d.reduce((s, x) => s + x.value, 0) || 1;
+      return d.slice(0, 6).map(x => ({ ...x, pct: Math.round((x.value / total) * 100) }));
     },
+
+    get byMethod() {
+      const m = new Map();
+      for (const t of this.periodAll) {
+        if (t.type === this.statsType && !t.isTransfer) m.set(t.methodId, (m.get(t.methodId) || 0) + t.amount);
+      }
+      const arr = [...m]
+        .map(([id, value]) => ({ id, name: this.methodName(id), value }))
+        .sort((a, b) => b.value - a.value);
+      const total = arr.reduce((s, x) => s + x.value, 0) || 1;
+      return arr.map(x => ({ ...x, pct: (x.value / total) * 100 }));
+    },
+
+    get tileList() {
+      const list = this.periodAll.filter(t => t.type === this.statsType && !t.isTransfer);
+      const total = list.reduce((s, t) => s + t.amount, 0);
+      const today = todayISO();
+      const end = this.period.end && this.period.end < today ? this.period.end : today;
+      const days = Math.max(1, Math.round((new Date(end) - new Date(this.period.start)) / 864e5) + 1);
+      const top = list.reduce((a, t) => (!a || t.amount > a.amount ? t : a), null);
+      return [
+        { label: 'Rata-rata / hari', value: rupiah(Math.round(total / days)) },
+        { label: 'Jumlah transaksi', value: list.length + ' transaksi' },
+        { label: 'Hari berjalan', value: days + ' hari' },
+        { label: 'Terbesar', value: top ? rupiah(top.amount) : '—', sub: top?.item || '' },
+      ];
+    },
+
+    trendData() {
+      const today = todayISO();
+      const end = this.period.end && this.period.end < today ? this.period.end : today;
+      const start = [this.period.start, addDaysISO(end, -44)].sort().pop();
+      const sums = new Map();
+      for (const t of this.periodAll) {
+        if (t.type === this.statsType && !t.isTransfer) sums.set(t.date, (sums.get(t.date) || 0) + t.amount);
+      }
+      const labels = [], values = [];
+      for (let d = start, n = 0; d <= end && n < 60; d = addDaysISO(d, 1), n++) {
+        labels.push(d.slice(8));
+        values.push(sums.get(d) || 0);
+      }
+      return { labels, values };
+    },
+
+    // =============== tren & kesehatan keuangan ===============
+    buildTrend() {
+      const n = this.trendN;
+      const today = todayISO();
+      let buckets;
+      if (this.trendMode === 'month') {
+        const end = this.period.end && this.period.end < today ? this.period.end : today;
+        let [y, m] = end.split('-').map(Number);
+        buckets = [];
+        for (let i = 0; i < n; i++) {
+          const key = `${y}-${String(m).padStart(2, '0')}`;
+          buckets.unshift({
+            key, label: fmtDate(key + '-01', { month: 'short', year: '2-digit' }),
+            open: key === today.slice(0, 7), has: d => d.startsWith(key), inc: 0, exp: 0,
+          });
+          if (--m === 0) { m = 12; y--; }
+        }
+      } else {
+        buckets = this.periods.slice(Math.max(0, this.index - n + 1), this.index + 1).map(p => ({
+          key: p.start, label: fmtDate(p.start, { day: 'numeric', month: 'short' }),
+          open: !p.end, has: d => inPeriod(d, p), inc: 0, exp: 0,
+        }));
+      }
+
+      for (const t of this.txs) {
+        if (t.isTransfer) continue;
+        const b = buckets.find(x => x.has(t.date));
+        if (!b) continue;
+        if (t.type === 'income') b.inc += t.amount; else b.exp += t.amount;
+      }
+      while (buckets.length > 1 && !buckets[0].inc && !buckets[0].exp) buckets.shift();
+
+      const rows = buckets.map(({ has, ...b }) => {
+        const net = b.inc - b.exp;
+        return { ...b, net, rate: b.inc > 0 ? Math.round((net / b.inc) * 100) : null };
+      });
+      const done = rows.filter(r => !r.open && r.inc > 0);
+      const sum = k => done.reduce((s, r) => s + r[k], 0);
+      const unit = this.trendMode === 'month' ? 'bulan' : 'periode';
+      const avgRate = sum('inc') ? Math.round((sum('net') / sum('inc')) * 100) : null;
+      const tiles = [
+        { label: 'Rasio tabungan rata-rata', value: avgRate === null ? '—' : avgRate + '%', sub: `target ≥ ${TARGET_SAVE}%` },
+        { label: (unit === 'bulan' ? 'Bulan' : 'Periode') + ' surplus',
+          value: done.length ? `${done.filter(r => r.net >= 0).length} dari ${done.length}` : '—', sub: 'pemasukan ≥ pengeluaran' },
+        { label: `Rata-rata keluar / ${unit}`, value: done.length ? rupiah(Math.round(sum('exp') / done.length)) : '—' },
+        { label: `Rata-rata sisa / ${unit}`, value: done.length ? rupiah(Math.round(sum('net') / done.length)) : '—' },
+      ];
+      return { rows, last: rows[rows.length - 1] || null, tiles };
+    },
+
+    setTrend(key, value) {
+      this[key] = value;
+      this.trend = this.buildTrend();
+      this.$nextTick(() => this.drawChart());
+    },
+
     setStats(t) { this.statsType = t; this.$nextTick(() => this.drawChart()); },
 
     drawChart() {
-      const el = document.getElementById('donut');
-      if (chart) { chart.destroy(); chart = null; }
+      Object.values(charts).forEach(c => c.destroy());
+      Object.keys(charts).forEach(k => delete charts[k]);
+      if (!window.Chart || this.route !== 'stats') return;
+      const el = id => document.getElementById(id);
+      const legend = { position: 'bottom', labels: { boxWidth: 10, usePointStyle: true } };
+      const scales = { x: { grid: { display: false } }, y: { beginAtZero: true, ticks: { callback: v => short(v) } } };
+
       const d = this.statsData;
-      if (!el || !d.length || !window.Chart) return;
-      chart = new Chart(el, {
-        type: 'doughnut',
-        data: {
-          labels: d.map(x => x.name),
-          datasets: [{ data: d.map(x => x.value), backgroundColor: d.map((_, i) => COLORS[i % COLORS.length]), borderWidth: 0 }],
-        },
-        options: { cutout: '68%', maintainAspectRatio: false, plugins: { legend: { display: false } } },
-      });
+      if (el('donut') && d.length) {
+        charts.donut = new Chart(el('donut'), {
+          type: 'doughnut',
+          data: { labels: d.map(x => x.name), datasets: [{ data: d.map(x => x.value), backgroundColor: d.map((_, i) => this.color(i)), borderWidth: 0 }] },
+          options: { cutout: '68%', maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ' ' + rupiah(c.parsed) } } } },
+        });
+      }
+
+      const tr = this.trendData();
+      if (el('trend') && tr.values.some(v => v > 0)) {
+        charts.trend = new Chart(el('trend'), {
+          type: 'bar',
+          data: { labels: tr.labels, datasets: [{ data: tr.values, backgroundColor: this.statsType === 'income' ? '#10b981' : '#2563eb', borderRadius: 4 }] },
+          options: { maintainAspectRatio: false, scales, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ' ' + rupiah(c.parsed.y) } } } },
+        });
+      }
+
+      const rows = this.trend.rows;
+      if (el('health') && rows.some(r => r.inc || r.exp)) {
+        const common = { yAxisID: 'y', borderRadius: 4, tension: 0.3, pointRadius: 3, fill: false };
+        charts.health = new Chart(el('health'), {
+          type: 'bar',
+          data: {
+            labels: rows.map(r => r.label + (r.open ? '*' : '')),
+            datasets: [
+              { type: this.trendKind === 'line' ? 'line' : 'bar', ...common, label: 'Pemasukan', data: rows.map(r => r.inc), backgroundColor: '#10b981', borderColor: '#10b981' },
+              { type: this.trendKind === 'line' ? 'line' : 'bar', ...common, label: 'Pengeluaran', data: rows.map(r => r.exp), backgroundColor: '#2563eb', borderColor: '#2563eb' },
+              { type: 'line', label: 'Rasio tabungan', data: rows.map(r => r.rate), yAxisID: 'y2', borderColor: '#f59e0b', backgroundColor: '#f59e0b', borderWidth: 2, pointRadius: 3, tension: 0.3, spanGaps: true },
+            ],
+          },
+          options: {
+            maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+            scales: {
+              x: { grid: { display: false } }, y: { beginAtZero: true, ticks: { callback: v => short(v) } },
+              y2: { position: 'right', beginAtZero: true, suggestedMin: -100, suggestedMax: 100, grid: { drawOnChartArea: false }, ticks: { callback: v => v + '%' } },
+            },
+            plugins: { legend, tooltip: { callbacks: { label: c => c.dataset.yAxisID === 'y2' ? ` ${c.dataset.label}: ${c.parsed.y ?? '—'}%` : ` ${c.dataset.label}: ${rupiah(c.parsed.y)}` } } },
+          },
+        });
+      }
     },
 
     // =============== pengaturan ===============

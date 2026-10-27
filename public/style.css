@@ -1,13 +1,15 @@
 [x-cloak] { display: none !important; }
 
 html, body { min-height: 100%; }
-html { touch-action: manipulation; }
 
 body {
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   -webkit-tap-highlight-color: transparent;
-  padding-top: env(safe-area-inset-top);
 }
 
-input, button, select, a { font: inherit; touch-action: manipulation; }
+input, button, select { font: inherit; }
 button { cursor: pointer; }
+
+.pt-safe { padding-top: calc(1rem + env(safe-area-inset-top)); }
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
