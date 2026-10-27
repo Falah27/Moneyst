@@ -6,10 +6,6 @@
   "display": "standalone",
   "background_color": "#f8fafc",
   "theme_color": "#10b981",
-  "icons": [
-    { "src": "/icons/192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "/icons/512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
-  ],
   "shortcuts": [
     { "name": "Catat Pengeluaran", "url": "/#/add" },
     { "name": "Rencana Belanja", "url": "/#/plans" }

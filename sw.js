@@ -1,7 +1,7 @@
 const CACHE = 'keuangan';
 const FILES = [
   '/', '/index.html', '/style.css', '/app.js', '/firebase.js', '/config.js',
-  '/utils.js', '/csv.js', '/manifest.json', '/icons/192.png', '/icons/512.png',
+  '/utils.js', '/csv.js', '/manifest.json',
 ];
 const CDN_HOSTS = ['cdn.tailwindcss.com', 'cdn.jsdelivr.net', 'www.gstatic.com'];
 const TIMEOUT = 3000;
