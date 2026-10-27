@@ -101,13 +101,14 @@ async function api(path, body) {
   return res.json();
 }
 async function send(chunk) {
-  try { await api('/api/batch', { ops: chunk }); return null; }
+  try { await api('/api/batch', { ops: chunk }); return []; }
   catch (e) {
     if (e.status !== 400) throw e;
-    if (chunk.length === 1) return e;
-    let badErr = null;
-    for (const op of chunk) badErr = (await send([op])) || badErr;
-    return badErr;
+    if (chunk.length === 1) return chunk;
+    const midpoint = Math.ceil(chunk.length / 2);
+    const left = await send(chunk.slice(0, midpoint));
+    const right = await send(chunk.slice(midpoint));
+    return [...left, ...right];
   }
 }
 function minFrom() {
@@ -127,11 +128,16 @@ async function sync() {
   running = true;
   let ok = false;
   try {
-    let dropped = null;
+    let failed = [];
     while (outbox.length) {
       const chunk = outbox.slice(0, CHUNK);
-      dropped = (await send(chunk)) || dropped;
+      failed = await send(chunk);
       outbox.splice(0, chunk.length);
+      if (failed.length) {
+        outbox.unshift(...failed);
+        saveOutbox();
+        break;
+      }
       saveOutbox();
     }
     const from = minFrom();
@@ -141,7 +147,12 @@ async function sync() {
     fromCache = false; fails = 0; delay = 3000; lastSync = Date.now(); ok = true;
     saveCache();
     emitAll();
-    if (dropped) notifyError(dropped);
+    if (failed.length) {
+      notifyError(Object.assign(
+        new Error(`${failed.length} perubahan ditolak server. Periksa data lalu coba lagi.`),
+        { status: 400 },
+      ));
+    }
   } catch (e) {
     fails++;
     if (e.auth || e.status || fails >= 3) notifyError(e.auth || e.status ? e : new Error('Tidak bisa terhubung ke server.'));

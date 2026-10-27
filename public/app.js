@@ -588,16 +588,17 @@ document.addEventListener('alpine:init', () => {
           const runKey = `${r.id}:${next}`;
           if (!exists && !this.recurringRuns.has(runKey)) {
             this.recurringRuns.add(runKey);
-            setDoc(doc(col('transactions')), {
+            setDoc(doc(col('transactions'), `recurring-${r.id}-${next}`), {
             date: next, item: r.item, categoryId: r.categoryId, methodId: r.methodId,
             amount: r.amount, type: 'expense', note: r.note || '', isSalary: false,
             isTransfer: false, recurringId: r.id, createdAt: Date.now(),
             }).catch(e => this.fail(e));
           }
-          const d = new Date(`${next}T00:00:00`);
-          d.setMonth(d.getMonth() + 1);
-          d.setDate(Math.min(r.dayOfMonth, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()));
-          next = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+          const [year, month] = next.split('-').map(Number);
+          const nextMonth = month === 12 ? 1 : month + 1;
+          const nextYear = month === 12 ? year + 1 : year;
+          const lastDay = new Date(nextYear, nextMonth, 0).getDate();
+          next = `${nextYear}-${String(nextMonth).padStart(2, '0')}-${String(Math.min(r.dayOfMonth, lastDay)).padStart(2, '0')}`;
         }
         if (next !== r.nextDate) updateDoc(doc(col('recurring'), r.id), { nextDate: next }).catch(e => this.fail(e));
       }
