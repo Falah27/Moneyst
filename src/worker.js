@@ -126,6 +126,8 @@ async function getData(url, env) {
     env.DB.prepare('SELECT * FROM categories'),
     env.DB.prepare(METHODS_WITH_BALANCE),
     env.DB.prepare('SELECT * FROM plan_items'),
+    env.DB.prepare('SELECT * FROM budgets'),
+    env.DB.prepare('SELECT * FROM recurring'),
   ]);
   const out = {};
   NAMES.forEach((n, i) => { out[n] = res[i].results.map(r => decode(SCHEMAS[n], r)); });
