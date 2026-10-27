@@ -70,6 +70,7 @@ if ('serviceWorker' in navigator) {
 document.addEventListener('alpine:init', () => {
   Alpine.data('app', () => ({
     busy: false,
+    loading: true,
     pending: false, syncErr: '', syncAt: 0, outboxCount: 0,
     online: navigator.onLine,
 
@@ -86,7 +87,9 @@ document.addEventListener('alpine:init', () => {
     // ----- UI state -----
     form: blankForm(),
     statsType: 'expense',
+    statsTab: 'summary',
     fCat: '', fMethod: '', filtered: false, fSum: { n: 0, income: 0, expense: 0 },
+    filterOpen: false, homeHighlights: false,
     toast: null, toastTimer: null,
     trendMode: 'period', trendN: 6, trendKind: 'bar',
     trend: { rows: [], last: null, tiles: [] },
@@ -139,6 +142,7 @@ document.addEventListener('alpine:init', () => {
           this.pending = snap.metadata.hasPendingWrites; // true = ada data belum terkirim ke server
           this.syncErr = '';
           this.txs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          this.loading = false;
           this.recompute();
           // kalau halaman edit dibuka langsung (reload), isi form setelah data tiba
           if (this.route === 'add' && this.form.id && !this.form.loaded) this.openForm(this.form.id);
@@ -239,6 +243,15 @@ document.addEventListener('alpine:init', () => {
       this.fCat = '';
       this.recompute();
       this.$nextTick(() => this.drawChart());
+    },
+    setStatsTab(tab) {
+      this.statsTab = tab;
+      this.$nextTick(() => this.drawChart());
+    },
+    filterWallet(m) {
+      this.fMethod = m.id;
+      this.recompute();
+      this.$nextTick(() => document.querySelector('.transaction-list')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
     },
     touchStart(e) { this.swipeX = e.changedTouches[0]?.clientX || 0; },
     touchEnd(e) {
@@ -579,17 +592,25 @@ document.addEventListener('alpine:init', () => {
       const r = this.recurringDraft;
       if (!r.item.trim() || !r.categoryId || !r.methodId || !r.amount) return alert('Lengkapi item, kategori, dompet, dan nominal');
       const day = Math.max(1, Math.min(31, Number(r.dayOfMonth) || 1));
-      const now = todayISO();
-      const y = Number(now.slice(0, 4)), m = Number(now.slice(5, 7));
-      let next = `${y}-${String(m).padStart(2, '0')}-${String(Math.min(day, new Date(y, m, 0).getDate())).padStart(2, '0')}`;
-      if (next < now) {
-        const d = new Date(y, m, 1); d.setMonth(d.getMonth() + 1);
-        next = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate())).padStart(2, '0')}`;
-      }
+      const next = this.nextRecurringDate(day);
       setDoc(doc(col('recurring')), { item: r.item.trim(), categoryId: r.categoryId, methodId: r.methodId,
         amount: Number(r.amount), dayOfMonth: day, nextDate: next, note: r.note.trim(), enabled: true })
         .catch(e => this.fail(e));
       this.recurringDraft = { item: '', categoryId: '', methodId: '', amount: 0, dayOfMonth: 1, note: '' };
+    },
+    nextRecurringDate(day, base = todayISO()) {
+      const [year, month, date] = base.split('-').map(Number);
+      let y = year, m = month;
+      if (date > Math.min(day, new Date(y, m, 0).getDate())) {
+        m++;
+        if (m === 13) { m = 1; y++; }
+      }
+      const last = new Date(y, m, 0).getDate();
+      return `${y}-${String(m).padStart(2, '0')}-${String(Math.min(day, last)).padStart(2, '0')}`;
+    },
+    get recurringPreview() {
+      const day = Math.max(1, Math.min(31, Number(this.recurringDraft.dayOfMonth) || 1));
+      return this.nextRecurringDate(day);
     },
     removeRecurring(r) { deleteDoc(doc(col('recurring'), r.id)).catch(e => this.fail(e)); },
 
