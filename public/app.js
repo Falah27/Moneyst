@@ -10,6 +10,7 @@ const WALLET_COLORS = [
   ['#2563eb', '#60a5fa'], ['#7c3aed', '#c084fc'], ['#059669', '#34d399'],
   ['#db2777', '#f472b6'], ['#ea580c', '#fb923c'], ['#0891b2', '#22d3ee'],
 ];
+const hashText = value => [...String(value || '')].reduce((n, c) => ((n * 31) + c.charCodeAt(0)) >>> 0, 7);
 
 const DEFAULT_CATS = [
   ['exp-makan', 'Makan', 'expense'], ['exp-jajan', 'Jajan', 'expense'],
@@ -69,7 +70,7 @@ if ('serviceWorker' in navigator) {
 document.addEventListener('alpine:init', () => {
   Alpine.data('app', () => ({
     busy: false,
-    pending: false, syncErr: '',
+    pending: false, syncErr: '', syncAt: 0, outboxCount: 0,
     online: navigator.onLine,
 
     // ----- data (dari Firestore) -----
@@ -93,6 +94,7 @@ document.addEventListener('alpine:init', () => {
     newPlan: { name: '', est: '' },
     recurringDraft: { item: '', categoryId: '', methodId: '', amount: 0, dayOfMonth: 1, note: '' },
     recurringRuns: new Set(),
+    swipeX: 0,
     newName: { cx: '', ci: '', m: '' },
     history: Number(localStorage.getItem('historyMonths') ?? 12),
     preview: null, previewBad: 0, importMsg: '',
@@ -112,6 +114,12 @@ document.addEventListener('alpine:init', () => {
       window.addEventListener('hashchange', () => this.readRoute());
       window.addEventListener('online', () => (this.online = true));
       window.addEventListener('offline', () => (this.online = false));
+      window.addEventListener('moneyst:sync', e => {
+        this.pending = !!e.detail?.pending;
+        this.outboxCount = e.detail?.outboxCount || 0;
+        if (e.detail?.ok) this.syncAt = e.detail.at;
+        if (e.detail?.error) this.syncErr = e.detail.error;
+      });
       this.listen();
       this.readRoute();
     },
@@ -232,13 +240,18 @@ document.addEventListener('alpine:init', () => {
       this.recompute();
       this.$nextTick(() => this.drawChart());
     },
+    touchStart(e) { this.swipeX = e.changedTouches[0]?.clientX || 0; },
+    touchEnd(e) {
+      const end = e.changedTouches[0]?.clientX || 0;
+      if (Math.abs(end - this.swipeX) < 55) return;
+      this.shift(end < this.swipeX ? 1 : -1);
+    },
     more() { this.limit += 150; this.recompute(); },
 
     catName(id) { return this.cats.find(c => c.id === id)?.name ?? '—'; },
     methodName(id) { return this.methods.find(m => m.id === id)?.name ?? '—'; },
     walletColor(m) {
-      const i = this.methods.findIndex(x => x.id === m.id);
-      return WALLET_COLORS[Math.max(0, i) % WALLET_COLORS.length];
+      return WALLET_COLORS[hashText(m.id) % WALLET_COLORS.length];
     },
     get filterCats() {
       return [...new Set(this.periodAll.filter(t => !this.isXfer(t)).map(t => this.catName(t.categoryId)))]
@@ -543,7 +556,10 @@ document.addEventListener('alpine:init', () => {
           const name = this.catName(b.categoryId);
           const value = spent.get(name) || 0;
           const pct = b.amount ? Math.round(value / b.amount * 100) : 0;
-          return { ...b, name, value, budget: b.amount, pct: Math.min(100, pct), over: pct >= 100, warn: pct >= 80 };
+          return {
+            ...b, name, value, budget: b.amount, pct, visualPct: Math.min(100, pct),
+            over: pct >= 100, warn: pct >= 80,
+          };
         }).sort((a, b) => b.value - a.value);
     },
     get budgetTotal() { return this.budgetRows.reduce((s, b) => s + b.budget, 0); },

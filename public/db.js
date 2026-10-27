@@ -6,6 +6,9 @@ const docs = Object.fromEntries(NAMES.map(n => [n, new Map()]));
 let outbox = [];
 let fromCache = true;
 const listeners = new Set();
+function announce(detail) {
+  window.dispatchEvent(new CustomEvent('moneyst:sync', { detail }));
+}
 export const db = {};
 const clean = data => JSON.parse(JSON.stringify(data));
 const newId = () => crypto.randomUUID?.() ?? Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
@@ -126,6 +129,7 @@ async function sync() {
   if (running) { again = true; return; }
   if (!navigator.onLine) return;
   running = true;
+  announce({ pending: true, outboxCount: outbox.length });
   let ok = false;
   try {
     let failed = [];
@@ -145,6 +149,7 @@ async function sync() {
     for (const n of NAMES) docs[n] = new Map((r[n] || []).map(d => [d.id, d]));
     outbox.forEach(apply);
     fromCache = false; fails = 0; delay = 3000; lastSync = Date.now(); ok = true;
+    announce({ ok: true, at: lastSync, pending: outbox.length > 0, outboxCount: outbox.length });
     saveCache();
     emitAll();
     if (failed.length) {
@@ -152,10 +157,12 @@ async function sync() {
         new Error(`${failed.length} perubahan ditolak server. Periksa data lalu coba lagi.`),
         { status: 400 },
       ));
+      announce({ error: `${failed.length} perubahan ditolak server.`, pending: true, outboxCount: outbox.length });
     }
   } catch (e) {
     fails++;
     if (e.auth || e.status || fails >= 3) notifyError(e.auth || e.status ? e : new Error('Tidak bisa terhubung ke server.'));
+    announce({ error: e.message, pending: outbox.length > 0, outboxCount: outbox.length });
   } finally {
     running = false;
     if (ok) { if (again) { again = false; queueSync(); } }
