@@ -87,13 +87,11 @@
             <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Money pockets</p>
             <p class="mt-0.5 text-sm font-semibold">Saldo dompet</p>
           </div>
-          <span class="text-[11px] font-medium text-slate-400" x-text="wallets.length + ' aktif'"></span>
         </div>
         <div class="no-scrollbar mt-3 flex gap-3 overflow-x-auto px-4 pb-1">
           <template x-for="m in wallets" :key="m.id">
             <div class="wallet-card w-40 shrink-0 overflow-hidden rounded-[1.35rem] p-3 text-white shadow-lg"
               :style="`--wallet-a:${walletColor(m)[0]};--wallet-b:${walletColor(m)[1]}`">
-              <span class="rounded-full bg-white/15 px-2 py-1 text-[10px] font-medium">aktif</span>
               <p class="mt-3 truncate text-xs font-medium text-white/75" x-text="m.name"></p>
               <p class="mt-1 text-base font-bold tracking-tight" :class="m.bal < 0 ? 'text-rose-100' : ''" x-text="rupiah(m.bal)"></p>
             </div>
