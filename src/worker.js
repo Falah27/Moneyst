@@ -8,6 +8,7 @@ const SCHEMAS = {
       amount: 'amount', type: 'type', note: 'note',
       isSalary: 'is_salary', isTransfer: 'is_transfer', createdAt: 'created_at',
       toMethodId: 'to_method_id',
+      recurringId: 'recurring_id',
     },
     bool: ['isSalary', 'isTransfer'],
     defaults: { note: '' },
@@ -27,6 +28,20 @@ const SCHEMAS = {
     },
     bool: ['done'],
     req: ['periodStart', 'name'],
+  },
+  budgets: {
+    table: 'budgets', stamp: true,
+    cols: { periodStart: 'period_start', categoryId: 'category_id', amount: 'amount' },
+    bool: [], req: ['periodStart', 'categoryId', 'amount'],
+  },
+  recurring: {
+    table: 'recurring', stamp: true,
+    cols: {
+      item: 'item', categoryId: 'category_id', methodId: 'method_id',
+      amount: 'amount', dayOfMonth: 'day_of_month', nextDate: 'next_date',
+      note: 'note', enabled: 'enabled',
+    },
+    bool: ['enabled'], defaults: { note: '' }, req: ['item', 'categoryId', 'methodId', 'amount', 'dayOfMonth', 'nextDate'],
   },
 };
 const NAMES = Object.keys(SCHEMAS);

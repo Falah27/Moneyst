@@ -1,4 +1,4 @@
-const NAMES = ['transactions', 'categories', 'methods', 'planItems'];
+const NAMES = ['transactions', 'categories', 'methods', 'planItems', 'budgets', 'recurring'];
 const CACHE_KEY = 'moneyst-cache-v1';
 const OUTBOX_KEY = 'moneyst-outbox-v1';
 const CHUNK = 40;

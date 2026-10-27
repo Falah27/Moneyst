@@ -69,7 +69,7 @@ document.addEventListener('alpine:init', () => {
     online: navigator.onLine,
 
     // ----- data (dari Firestore) -----
-    txs: [], cats: [], methods: [], planItems: [],
+    txs: [], cats: [], methods: [], planItems: [], budgets: [], recurring: [],
 
     // ----- routing & periode -----
     route: 'home',
@@ -85,7 +85,10 @@ document.addEventListener('alpine:init', () => {
     toast: null, toastTimer: null,
     trendMode: 'period', trendN: 6, trendKind: 'bar',
     trend: { rows: [], last: null, tiles: [] },
+    speedChart: null,
     newPlan: { name: '', est: '' },
+    recurringDraft: { item: '', categoryId: '', methodId: '', amount: 0, dayOfMonth: 1, note: '' },
+    recurringRuns: new Set(),
     newName: { cx: '', ci: '', m: '' },
     history: Number(localStorage.getItem('historyMonths') ?? 12),
     preview: null, previewBad: 0, importMsg: '',
@@ -149,6 +152,14 @@ document.addEventListener('alpine:init', () => {
         onSnapshot(col('planItems'), snap => {
           this.planItems = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         }, err('planItems')),
+        onSnapshot(col('budgets'), snap => {
+          this.budgets = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          this.recompute();
+        }, err('budgets')),
+        onSnapshot(col('recurring'), snap => {
+          this.recurring = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          this.processRecurring();
+        }, err('recurring')),
       ];
     },
 
@@ -180,6 +191,7 @@ document.addEventListener('alpine:init', () => {
         .filter(t => inPeriod(t.date, this.period))
         .sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt || 0) - (a.createdAt || 0));
       this.periodAll = all;
+      this.processRecurring();
 
       // transfer antar dompet tidak dihitung sebagai pemasukan/pengeluaran
       const real = all.filter(t => !t.isTransfer);
@@ -335,6 +347,24 @@ document.addEventListener('alpine:init', () => {
       this.form = f;
     },
 
+    get itemSuggestions() {
+      const q = this.form.item.trim().toLowerCase();
+      if (!q) return [];
+      const seen = new Set();
+      return this.txs
+        .filter(t => t.item && t.item.toLowerCase().includes(q) && !this.isXfer(t))
+        .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+        .filter(t => { const key = t.item.toLowerCase(); if (seen.has(key)) return false; seen.add(key); return true; })
+        .slice(0, 5);
+    },
+    applySuggestion(t) {
+      this.form.item = t.item;
+      this.form.amount = t.amount;
+      this.form.categoryId = t.categoryId || '';
+      this.form.methodId = t.methodId || this.form.methodId;
+      this.form.note = t.note || '';
+    },
+
     setType(t) { this.form.type = t; this.form.categoryId = ''; this.form.isSalary = false; },
     pickCat(c) {
       this.form.categoryId = c.id;
@@ -370,6 +400,7 @@ document.addEventListener('alpine:init', () => {
         type: transfer ? 'expense' : f.type,
         note: f.note.trim(),
         isSalary,
+        recurringId: old?.recurringId || null,
         isTransfer: transfer || (!!old?.isTransfer && !old?.toMethodId),
         createdAt: old?.createdAt ?? Date.now(),
       }).catch(e => this.fail(e));
@@ -488,9 +519,93 @@ document.addEventListener('alpine:init', () => {
     get statsTotal() { return this.statsData.reduce((s, d) => s + d.value, 0); },
 
     get topCats() {
-      const d = this.catTotals('expense');
-      const total = d.reduce((s, x) => s + x.value, 0) || 1;
-      return d.slice(0, 6).map(x => ({ ...x, pct: Math.round((x.value / total) * 100) }));
+      return this.budgetRows.length ? this.budgetRows.slice(0, 6) : (() => {
+        const d = this.catTotals('expense');
+        const total = d.reduce((s, x) => s + x.value, 0) || 1;
+        return d.slice(0, 6).map(x => ({ ...x, pct: Math.round((x.value / total) * 100), budget: null }));
+      })();
+    },
+
+    get budgetRows() {
+      const spent = new Map(this.catTotals('expense').map(x => [x.name, x.value]));
+      return this.budgets.filter(b => b.periodStart === this.period.start)
+        .map(b => {
+          const name = this.catName(b.categoryId);
+          const value = spent.get(name) || 0;
+          const pct = b.amount ? Math.round(value / b.amount * 100) : 0;
+          return { ...b, name, value, budget: b.amount, pct: Math.min(100, pct), over: pct >= 100, warn: pct >= 80 };
+        }).sort((a, b) => b.value - a.value);
+    },
+    get budgetTotal() { return this.budgetRows.reduce((s, b) => s + b.budget, 0); },
+    get budgetSpent() { return this.budgetRows.reduce((s, b) => s + b.value, 0); },
+    get budgetPercent() { return this.budgetTotal ? Math.round(this.budgetSpent / this.budgetTotal * 100) : 0; },
+    saveBudget(categoryId, amount) {
+      const id = `budget-${this.period.start}-${categoryId}`;
+      if (!amount) return deleteDoc(doc(col('budgets'), id)).catch(e => this.fail(e));
+      setDoc(doc(col('budgets'), id), { periodStart: this.period.start, categoryId, amount }).catch(e => this.fail(e));
+    },
+    get budgetEditors() {
+      return this.cats.filter(c => c.type === 'expense').map(c => ({
+        ...c, amount: this.budgets.find(b => b.periodStart === this.period.start && b.categoryId === c.id)?.amount || 0,
+      }));
+    },
+    saveRecurring() {
+      const r = this.recurringDraft;
+      if (!r.item.trim() || !r.categoryId || !r.methodId || !r.amount) return alert('Lengkapi item, kategori, dompet, dan nominal');
+      const day = Math.max(1, Math.min(31, Number(r.dayOfMonth) || 1));
+      const now = todayISO();
+      const y = Number(now.slice(0, 4)), m = Number(now.slice(5, 7));
+      let next = `${y}-${String(m).padStart(2, '0')}-${String(Math.min(day, new Date(y, m, 0).getDate())).padStart(2, '0')}`;
+      if (next < now) {
+        const d = new Date(y, m, 1); d.setMonth(d.getMonth() + 1);
+        next = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate())).padStart(2, '0')}`;
+      }
+      setDoc(doc(col('recurring')), { item: r.item.trim(), categoryId: r.categoryId, methodId: r.methodId,
+        amount: Number(r.amount), dayOfMonth: day, nextDate: next, note: r.note.trim(), enabled: true })
+        .catch(e => this.fail(e));
+      this.recurringDraft = { item: '', categoryId: '', methodId: '', amount: 0, dayOfMonth: 1, note: '' };
+    },
+    removeRecurring(r) { deleteDoc(doc(col('recurring'), r.id)).catch(e => this.fail(e)); },
+
+    processRecurring() {
+      if (!this.recurring.length || !this.txs.length && !this.methods.length) return;
+      const today = todayISO();
+      for (const r of this.recurring.filter(x => x.enabled && x.nextDate <= today)) {
+        let next = r.nextDate;
+        let count = 0;
+        while (next <= today && count++ < 24) {
+          const exists = this.txs.some(t => t.recurringId === r.id && t.date === next);
+          const runKey = `${r.id}:${next}`;
+          if (!exists && !this.recurringRuns.has(runKey)) {
+            this.recurringRuns.add(runKey);
+            setDoc(doc(col('transactions')), {
+            date: next, item: r.item, categoryId: r.categoryId, methodId: r.methodId,
+            amount: r.amount, type: 'expense', note: r.note || '', isSalary: false,
+            isTransfer: false, recurringId: r.id, createdAt: Date.now(),
+            }).catch(e => this.fail(e));
+          }
+          const d = new Date(`${next}T00:00:00`);
+          d.setMonth(d.getMonth() + 1);
+          d.setDate(Math.min(r.dayOfMonth, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()));
+          next = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        }
+        if (next !== r.nextDate) updateDoc(doc(col('recurring'), r.id), { nextDate: next }).catch(e => this.fail(e));
+      }
+    },
+
+    get speedData() {
+      const today = todayISO();
+      const end = this.period.end && this.period.end < today ? this.period.end : today;
+      const days = Math.max(1, Math.round((new Date(end) - new Date(this.period.start)) / 864e5) + 1);
+      const daily = this.budgetTotal / days;
+      const sums = new Map();
+      this.periodAll.filter(t => t.type === 'expense' && !this.isXfer(t)).forEach(t => sums.set(t.date, (sums.get(t.date) || 0) + t.amount));
+      const labels = [], actual = [], ideal = []; let run = 0;
+      for (let i = 0; i < days; i++) {
+        const date = addDaysISO(this.period.start, i);
+        labels.push(date.slice(8)); run += sums.get(date) || 0; actual.push(run); ideal.push(Math.round(daily * (i + 1)));
+      }
+      return { labels, actual, ideal };
     },
 
     get byMethod() {
@@ -617,6 +732,24 @@ document.addEventListener('alpine:init', () => {
           type: 'bar',
           data: { labels: tr.labels, datasets: [{ data: tr.values, backgroundColor: this.statsType === 'income' ? '#10b981' : '#2563eb', borderRadius: 4 }] },
           options: { maintainAspectRatio: false, scales, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ' ' + rupiah(c.parsed.y) } } } },
+        });
+      }
+
+      const speed = this.speedData;
+      if (el('speed') && (speed.actual.some(v => v > 0) || speed.ideal.some(v => v > 0))) {
+        charts.speed = new Chart(el('speed'), {
+          type: 'line',
+          data: {
+            labels: speed.labels,
+            datasets: [
+              { label: 'Pengeluaran kumulatif', data: speed.actual, borderColor: '#f43f5e', backgroundColor: '#f43f5e', tension: 0.25, pointRadius: 2 },
+              { label: 'Jatah ideal harian', data: speed.ideal, borderColor: '#2563eb', backgroundColor: '#2563eb', borderDash: [5, 4], tension: 0.25, pointRadius: 0 },
+            ],
+          },
+          options: {
+            maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+            scales, plugins: { legend, tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${rupiah(c.parsed.y)}` } } },
+          },
         });
       }
 

@@ -97,10 +97,10 @@
         Atur saldo dompet di Pengaturan &rarr;
       </a>
 
-      <!-- pengeluaran teratas (nanti diganti anggaran per kategori) -->
+      <!-- anggaran kategori -->
       <div x-show="topCats.length" class="mt-5">
         <div class="flex items-baseline justify-between px-5">
-          <p class="text-sm font-semibold">Pengeluaran teratas</p>
+          <p class="text-sm font-semibold" x-text="budgetRows.length ? 'Anggaran kategori' : 'Pengeluaran teratas'"></p>
           <a href="#/stats" class="text-xs text-blue-600">Lihat semua</a>
         </div>
         <div class="no-scrollbar mt-2 flex gap-3 overflow-x-auto px-4">
@@ -112,7 +112,8 @@
                   :style="`color:${color(i)}`" x-html="icon(c.name)"></div>
               </div>
               <p class="mt-2 truncate text-xs font-medium" x-text="c.name"></p>
-              <p class="text-[11px] text-slate-400" x-text="c.pct + '% - ' + short(c.value)"></p>
+              <p class="text-[11px]" :class="c.warn ? 'text-amber-600' : 'text-slate-400'"
+                x-text="c.budget ? `${c.pct}% - ${short(c.value)} / ${short(c.budget)}` : c.pct + '% - ' + short(c.value)"></p>
             </div>
           </template>
         </div>
@@ -198,6 +199,7 @@
                 <span class="text-[11px] text-slate-400">Total</span>
                 <span class="text-sm font-bold" x-text="rupiah(statsTotal)"></span>
               </div>
+
             </div>
             <ul class="min-w-0 flex-1 space-y-1.5 text-xs">
               <template x-for="(d,i) in statsData.slice(0,5)" :key="d.name">
@@ -227,6 +229,16 @@
           <p class="mb-2 text-sm font-semibold"
             x-text="(statsType==='income' ? 'Pemasukan' : 'Pengeluaran') + ' per hari'"></p>
           <div class="relative h-44"><canvas id="trend"></canvas></div>
+        </div>
+
+        <div x-show="budgetTotal" class="rounded-2xl bg-white p-4 shadow-sm">
+          <div class="flex items-center justify-between">
+            <p class="text-sm font-semibold">Kecepatan belanja</p>
+            <span class="text-xs" :class="budgetPercent >= 80 ? 'text-amber-600' : 'text-slate-400'"
+              x-text="budgetPercent + '% dari total anggaran'"></span>
+          </div>
+          <div class="mt-3 relative h-52"><canvas id="speed"></canvas></div>
+          <p class="mt-2 text-xs text-slate-400">Garis merah adalah pengeluaran kumulatif; garis biru adalah jatah ideal harian.</p>
         </div>
 
         <!-- rincian kategori -->
@@ -383,6 +395,50 @@
         </div>
       </div>
 
+      <div class="rounded-2xl bg-white p-4 shadow-sm">
+        <h3 class="font-semibold">Anggaran kategori periode ini</h3>
+        <p class="mb-3 text-xs text-slate-400">Peringatan muncul saat pengeluaran mencapai 80% dari jatah kategori.</p>
+        <div class="space-y-2">
+          <template x-for="c in budgetEditors" :key="c.id">
+            <label class="flex items-center gap-3 text-sm">
+              <span class="min-w-0 flex-1 truncate" x-text="c.name"></span>
+              <input inputmode="numeric" :value="c.amount ? fmtNum(c.amount) : ''"
+                @change="saveBudget(c.id, parseNum($event.target.value))"
+                placeholder="Tanpa batas" class="w-32 rounded-lg border border-slate-200 px-3 py-1.5 text-right text-sm" />
+            </label>
+          </template>
+        </div>
+      </div>
+
+      <div class="rounded-2xl bg-white p-4 shadow-sm">
+        <h3 class="font-semibold">Transaksi berulang</h3>
+        <p class="mb-3 text-xs text-slate-400">Tagihan dibuat otomatis saat aplikasi dibuka, termasuk transaksi yang terlewat.</p>
+        <div class="grid grid-cols-2 gap-2">
+          <input x-model="recurringDraft.item" placeholder="Nama tagihan" class="rounded-lg border border-slate-200 px-3 py-2 text-sm" />
+          <input inputmode="numeric" :value="fmtNum(recurringDraft.amount)"
+            @input="recurringDraft.amount=parseNum($event.target.value); $event.target.value=fmtNum(recurringDraft.amount)"
+            placeholder="Nominal" class="rounded-lg border border-slate-200 px-3 py-2 text-sm" />
+          <select x-model="recurringDraft.categoryId" class="rounded-lg border border-slate-200 px-3 py-2 text-sm">
+            <option value="">Kategori</option><template x-for="c in cats.filter(x=>x.type==='expense')" :key="c.id"><option :value="c.id" x-text="c.name"></option></template>
+          </select>
+          <select x-model="recurringDraft.methodId" class="rounded-lg border border-slate-200 px-3 py-2 text-sm">
+            <option value="">Dompet</option><template x-for="m in methods" :key="m.id"><option :value="m.id" x-text="m.name"></option></template>
+          </select>
+          <label class="col-span-2 flex items-center gap-2 text-sm text-slate-600">Tanggal tiap bulan
+            <input type="number" min="1" max="31" x-model.number="recurringDraft.dayOfMonth" class="w-20 rounded-lg border border-slate-200 px-3 py-2" />
+            <button @click="saveRecurring()" class="ml-auto rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white">Tambah</button>
+          </label>
+        </div>
+        <div class="mt-3 divide-y divide-slate-100">
+          <template x-for="r in recurring" :key="r.id">
+            <div class="flex items-center justify-between py-2 text-sm">
+              <span><span x-text="r.item"></span><span class="ml-2 text-xs text-slate-400" x-text="rupiah(r.amount)+' / tgl '+r.dayOfMonth"></span></span>
+              <button @click="removeRecurring(r)" class="text-xs text-rose-500">Hapus</button>
+            </div>
+          </template>
+        </div>
+      </div>
+
       <template x-for="s in lists" :key="s.key">
         <div class="rounded-2xl bg-white p-4 shadow-sm">
           <h3 class="mb-3 font-semibold" x-text="s.title"></h3>
@@ -482,6 +538,15 @@
 
           <input x-model="form.item" placeholder="Nama item (opsional)"
             class="w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-blue-500" />
+          <div x-show="itemSuggestions.length" class="-mt-3 rounded-xl border border-slate-100 bg-slate-50 p-2">
+            <p class="px-2 pb-1 text-[11px] text-slate-400">Isi dari transaksi terakhir</p>
+            <template x-for="s in itemSuggestions" :key="s.id">
+              <button type="button" @click="applySuggestion(s)"
+                class="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-sm hover:bg-white">
+                <span x-text="s.item"></span><span class="text-xs text-slate-400" x-text="rupiah(s.amount)"></span>
+              </button>
+            </template>
+          </div>
 
           <div>
             <p class="mb-2 text-xs font-medium text-slate-400"
