@@ -24,6 +24,17 @@ const DEFAULT_METHODS = [
   ['m-cash', 'Cash'], ['m-dana', 'DANA'], ['m-shopeepay', 'Shopeepay'],
   ['m-livin', 'Livin (Mandiri)'], ['m-octo', 'Octo (CIMB)'],
 ];
+const HIDDEN_WALLETS_KEY = 'moneyst-hidden-wallets-v1';
+const EYE_ON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.5"/></svg>';
+const EYE_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m3 3 18 18"/><path d="M10.6 6.2A10.7 10.7 0 0 1 12 6c6 0 9.5 6 9.5 6a17 17 0 0 1-3.1 3.8M6.2 6.3C3.9 7.8 2.5 12 2.5 12s3.5 6 9.5 6a10 10 0 0 0 2.2-.3"/><path d="M9.8 9.8a2.5 2.5 0 0 0 3.5 3.5"/></svg>';
+const loadHiddenWallets = () => {
+  try {
+    const ids = JSON.parse(localStorage.getItem(HIDDEN_WALLETS_KEY) || '[]');
+    return new Set(Array.isArray(ids) ? ids.filter(id => typeof id === 'string') : []);
+  } catch {
+    return new Set();
+  }
+};
 
 const byName = (a, b) => a.name.localeCompare(b.name, 'id');
 const blankForm = () => ({
@@ -89,7 +100,8 @@ document.addEventListener('alpine:init', () => {
     statsType: 'expense',
     statsTab: 'summary',
     fCat: '', fMethod: '', filtered: false, fSum: { n: 0, income: 0, expense: 0 },
-    filterOpen: false, homeHighlights: false,
+    filterOpen: false, homeHighlights: false, fType: '',
+    hiddenWallets: loadHiddenWallets(),
     toast: null, toastTimer: null,
     trendMode: 'period', trendN: 6, trendKind: 'bar',
     trend: { rows: [], last: null, tiles: [] },
@@ -216,10 +228,11 @@ document.addEventListener('alpine:init', () => {
 
       const needle = this.q.trim().toLowerCase();
       let list = all;
+      if (this.fType) list = list.filter(t => !this.isXfer(t) && t.type === this.fType);
       if (this.fCat) list = list.filter(t => !this.isXfer(t) && this.catName(t.categoryId) === this.fCat);
       if (this.fMethod) list = list.filter(t => t.methodId === this.fMethod || t.toMethodId === this.fMethod);
       if (needle) list = list.filter(t => `${t.item} ${this.catLabel(t)} ${t.note || ''}`.toLowerCase().includes(needle));
-      this.filtered = !!(this.fCat || this.fMethod || needle);
+      this.filtered = !!(this.fType || this.fCat || this.fMethod || needle);
       const sum = { n: list.length, income: 0, expense: 0 };
       for (const t of list) if (!t.isTransfer) sum[t.type === 'income' ? 'income' : 'expense'] += t.amount;
       this.fSum = sum;
@@ -241,6 +254,8 @@ document.addEventListener('alpine:init', () => {
       const i = Math.max(0, Math.min(this.periods.length - 1, this.index + d));
       this.sel = i === defaultIndex(this.periods) ? null : i; // null = ikut periode terbaru
       this.fCat = '';
+      this.fMethod = '';
+      this.fType = '';
       this.recompute();
       this.$nextTick(() => this.drawChart());
     },
@@ -249,7 +264,7 @@ document.addEventListener('alpine:init', () => {
       this.$nextTick(() => this.drawChart());
     },
     filterWallet(m) {
-      this.fMethod = m.id;
+      this.fMethod = this.fMethod === m.id ? '' : m.id;
       this.recompute();
       this.$nextTick(() => document.querySelector('.transaction-list')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
     },
@@ -263,6 +278,11 @@ document.addEventListener('alpine:init', () => {
 
     catName(id) { return this.cats.find(c => c.id === id)?.name ?? '—'; },
     methodName(id) { return this.methods.find(m => m.id === id)?.name ?? '—'; },
+    methodColor(id) {
+      const m = this.methods.find(x => x.id === id);
+      return m ? this.walletColor(m)[0] : '#cbd5e1';
+    },
+    eyeIcon(visible) { return visible ? EYE_ON : EYE_OFF; },
     walletColor(m) {
       return WALLET_COLORS[hashText(m.id) % WALLET_COLORS.length];
     },
@@ -328,6 +348,13 @@ document.addEventListener('alpine:init', () => {
         .sort((a, b) => b.bal - a.bal);
     },
     get walletTotal() { return this.wallets.reduce((s, m) => s + m.bal, 0); },
+    walletVisible(m) { return !this.hiddenWallets.has(m.id); },
+    walletAmount(m) { return this.walletVisible(m) ? rupiah(m.bal) : 'Rp ••••••'; },
+    toggleWalletVisibility(m) {
+      if (this.hiddenWallets.has(m.id)) this.hiddenWallets.delete(m.id);
+      else this.hiddenWallets.add(m.id);
+      localStorage.setItem(HIDDEN_WALLETS_KEY, JSON.stringify([...this.hiddenWallets]));
+    },
 
     netSince(id, from) {
       let n = 0;
@@ -898,3 +925,8 @@ document.addEventListener('alpine:init', () => {
     },
   }));
 });
+
+const alpineScript = document.createElement('script');
+alpineScript.src = 'https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js';
+alpineScript.crossOrigin = 'anonymous';
+document.head.append(alpineScript);
