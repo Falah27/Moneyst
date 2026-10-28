@@ -119,17 +119,44 @@
       </a>
 
       <!-- anggaran kategori -->
-      <div x-show="topCats.length && homeHighlights" class="mt-5">
-        <div class="flex items-baseline justify-between px-5">
-          <p class="text-sm font-semibold" x-text="budgetRows.length ? 'Anggaran kategori' : 'Pengeluaran teratas'"></p>
-          <a href="#/stats" class="text-xs text-blue-600">Lihat semua</a>
+      <div x-show="budgetTotal" class="mx-4 mt-5 rounded-2xl bg-white p-4 shadow-sm">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Batas periode</p>
+            <p class="mt-1 text-sm font-semibold">Anggaran pengeluaran</p>
+          </div>
+          <span class="rounded-full px-2.5 py-1 text-xs font-semibold"
+            :class="budgetPercent >= 100 ? 'bg-rose-100 text-rose-700' : budgetPercent >= 80 ? 'bg-amber-100 text-amber-700' : 'bg-blue-50 text-blue-700'"
+            x-text="budgetPercent + '%'"></span>
         </div>
-        <button x-show="topCats.length" @click="homeHighlights=!homeHighlights"
-          class="mx-4 mt-4 flex w-[calc(100%-2rem)] items-center justify-between rounded-xl bg-white px-4 py-3 text-xs font-semibold text-slate-600 shadow-sm">
-          <span x-text="homeHighlights ? 'Sembunyikan ringkasan kategori' : 'Lihat ringkasan kategori'"></span>
-          <span x-text="homeHighlights ? '&uarr;' : '&darr;'"></span>
-        </button>
-        <div class="no-scrollbar mt-2 flex gap-3 overflow-x-auto px-4">
+        <div class="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
+          <div class="h-full rounded-full transition-all"
+            :class="budgetPercent >= 100 ? 'bg-rose-500' : budgetPercent >= 80 ? 'bg-amber-500' : 'bg-blue-600'"
+            :style="`width:${Math.min(100, budgetPercent)}%`"></div>
+        </div>
+        <div class="mt-2 flex items-center justify-between text-xs">
+          <span class="text-slate-500" x-text="rupiah(budgetSpent) + ' dari ' + rupiah(budgetTotal)"></span>
+          <span :class="budgetRemaining < 0 ? 'font-semibold text-rose-600' : budgetPercent >= 80 ? 'text-amber-600' : 'text-slate-400'"
+            x-text="budgetStatus"></span>
+        </div>
+      </div>
+
+      <div x-show="!budgetTotal" class="mx-4 mt-5 flex items-center justify-between rounded-2xl border border-dashed border-blue-200 bg-blue-50 p-4">
+        <div class="pr-3">
+          <p class="text-sm font-semibold text-blue-900">Belum ada anggaran</p>
+          <p class="mt-1 text-xs text-blue-700">Atur batas kategori agar tahu kapan perlu mengerem.</p>
+        </div>
+        <a href="#/settings" class="shrink-0 rounded-xl bg-blue-600 px-3 py-2 text-xs font-semibold text-white">Atur</a>
+      </div>
+
+      <div x-show="topCats.length" class="mt-5">
+        <div class="flex items-center justify-between px-5">
+          <p class="text-sm font-semibold" x-text="budgetRows.length ? 'Anggaran kategori' : 'Pengeluaran teratas'"></p>
+          <button @click="homeHighlights=!homeHighlights"
+            class="rounded-lg px-2 py-1 text-xs font-semibold text-blue-600"
+            x-text="homeHighlights ? 'Tutup' : 'Lihat'"></button>
+        </div>
+        <div x-show="homeHighlights" x-transition class="no-scrollbar mt-2 flex gap-3 overflow-x-auto px-4">
           <template x-for="(c,i) in topCats" :key="c.name">
             <div class="w-28 shrink-0 rounded-2xl bg-white p-3 text-center shadow-sm">
               <div class="relative mx-auto h-14 w-14 rounded-full"
@@ -496,8 +523,17 @@
           </p>
           <template x-for="r in recurring" :key="r.id">
             <div class="flex items-center justify-between py-2 text-sm">
-              <span><span x-text="r.item"></span><span class="ml-2 text-xs text-slate-400" x-text="rupiah(r.amount)+' / tgl '+r.dayOfMonth"></span></span>
-              <button @click="removeRecurring(r)" class="text-xs text-rose-500">Hapus</button>
+              <div class="min-w-0">
+                <p class="truncate" :class="r.enabled ? '' : 'text-slate-400 line-through'" x-text="r.item"></p>
+                <p class="text-xs text-slate-400"
+                  x-text="rupiah(r.amount)+' / tgl '+r.dayOfMonth+' · berikutnya '+fmtDate(r.nextDate)"></p>
+              </div>
+              <div class="ml-3 flex shrink-0 items-center gap-2">
+                <button @click="toggleRecurring(r)" class="rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                  :class="r.enabled ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'"
+                  x-text="r.enabled ? 'Aktif' : 'Nonaktif'"></button>
+                <button @click="removeRecurring(r)" class="text-xs text-rose-500">Hapus</button>
+              </div>
             </div>
           </template>
         </div>

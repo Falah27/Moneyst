@@ -578,6 +578,13 @@ document.addEventListener('alpine:init', () => {
     get budgetTotal() { return this.budgetRows.reduce((s, b) => s + b.budget, 0); },
     get budgetSpent() { return this.budgetRows.reduce((s, b) => s + b.value, 0); },
     get budgetPercent() { return this.budgetTotal ? Math.round(this.budgetSpent / this.budgetTotal * 100) : 0; },
+    get budgetRemaining() { return this.budgetTotal - this.budgetSpent; },
+    get budgetStatus() {
+      if (!this.budgetTotal) return 'Belum ada batas pengeluaran';
+      if (this.budgetRemaining < 0) return `Melewati anggaran ${rupiah(Math.abs(this.budgetRemaining))}`;
+      if (this.budgetPercent >= 80) return `Sisa anggaran ${rupiah(this.budgetRemaining)}`;
+      return `Sisa ${rupiah(this.budgetRemaining)} dari total anggaran`;
+    },
     saveBudget(categoryId, amount) {
       const id = `budget-${this.period.start}-${categoryId}`;
       if (!amount) return deleteDoc(doc(col('budgets'), id)).catch(e => this.fail(e));
@@ -613,6 +620,9 @@ document.addEventListener('alpine:init', () => {
       return this.nextRecurringDate(day);
     },
     removeRecurring(r) { deleteDoc(doc(col('recurring'), r.id)).catch(e => this.fail(e)); },
+    toggleRecurring(r) {
+      updateDoc(doc(col('recurring'), r.id), { enabled: !r.enabled }).catch(e => this.fail(e));
+    },
 
     processRecurring() {
       if (!this.recurring.length || !this.txs.length && !this.methods.length) return;
