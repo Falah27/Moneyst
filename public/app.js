@@ -582,7 +582,7 @@ document.addEventListener('alpine:init', () => {
     get statsTotal() { return this.statsData.reduce((s, d) => s + d.value, 0); },
 
     get topCats() {
-      return this.budgetRows.length ? this.budgetRows.slice(0, 3) : (() => {
+      return this.budgetRows.length ? this.budgetRows.slice(0, 6) : (() => {
         const d = this.catTotals('expense');
         const total = d.reduce((s, x) => s + x.value, 0) || 1;
         return d.slice(0, 6).map(x => ({ ...x, pct: Math.round((x.value / total) * 100), budget: null }));
@@ -598,7 +598,7 @@ document.addEventListener('alpine:init', () => {
           const pct = b.amount ? Math.round(value / b.amount * 100) : 0;
           return {
             ...b, name, value, budget: b.amount, pct, visualPct: Math.min(100, pct),
-            over: pct >= 100, warn: pct >= 80,
+            over: value > b.amount, reached: value === b.amount, warn: pct >= 80,
           };
         }).sort((a, b) => b.value - a.value);
     },

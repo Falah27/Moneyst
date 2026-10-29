@@ -142,7 +142,7 @@
               </div>
               <p class="mt-2 truncate text-xs font-medium" x-text="c.name"></p>
               <p class="text-[11px]" :class="c.warn ? 'text-amber-600' : 'text-slate-400'"
-                x-text="c.budget ? `${c.pct}% - ${short(c.value)} / ${short(c.budget)}${c.over ? ' - Lewat' : ''}` : c.pct + '% - ' + short(c.value)"></p>
+                x-text="c.budget ? `${c.pct}% - ${short(c.value)} / ${short(c.budget)}${c.over ? ' - Lewat' : c.reached ? ' - Batas' : ''}` : c.pct + '% - ' + short(c.value)"></p>
             </button>
           </template>
         </div>
@@ -292,17 +292,17 @@
                   <div class="flex items-center justify-between text-sm">
                     <span class="font-medium" x-text="b.name"></span>
                     <span class="text-xs font-semibold"
-                      :class="b.over ? 'text-rose-600' : b.warn ? 'text-amber-600' : 'text-slate-500'"
+                      :class="b.over ? 'text-rose-600' : b.reached ? 'text-amber-600' : b.warn ? 'text-amber-600' : 'text-slate-500'"
                       x-text="b.pct+'%'"></span>
                   </div>
                   <div class="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-100">
                     <div class="h-full rounded-full"
-                      :class="b.over ? 'bg-rose-500' : b.warn ? 'bg-amber-500' : 'bg-blue-500'"
+                      :class="b.over ? 'bg-rose-500' : b.reached ? 'bg-amber-500' : b.warn ? 'bg-amber-500' : 'bg-blue-500'"
                       :style="`width:${Math.min(100,b.pct)}%`"></div>
                   </div>
                   <div class="mt-1 flex justify-between text-[11px] text-slate-400">
                     <span x-text="rupiah(b.value)+' dari '+rupiah(b.budget)"></span>
-                    <span x-text="b.over ? 'Lewat '+rupiah(b.value-b.budget) : 'Sisa '+rupiah(b.budget-b.value)"></span>
+                    <span x-text="b.over ? 'Lewat '+rupiah(b.value-b.budget) : b.reached ? 'Batas tercapai' : 'Sisa '+rupiah(b.budget-b.value)"></span>
                   </div>
                 </button>
               </template>
