@@ -582,7 +582,7 @@ document.addEventListener('alpine:init', () => {
     get statsTotal() { return this.statsData.reduce((s, d) => s + d.value, 0); },
 
     get topCats() {
-      return this.budgetRows.length ? this.budgetRows.slice(0, 6) : (() => {
+      return this.budgetRows.length ? this.budgetRows.slice(0, 3) : (() => {
         const d = this.catTotals('expense');
         const total = d.reduce((s, x) => s + x.value, 0) || 1;
         return d.slice(0, 6).map(x => ({ ...x, pct: Math.round((x.value / total) * 100), budget: null }));
@@ -605,6 +605,9 @@ document.addEventListener('alpine:init', () => {
     get budgetTotal() { return this.budgetRows.reduce((s, b) => s + b.budget, 0); },
     get budgetSpent() { return this.budgetRows.reduce((s, b) => s + b.value, 0); },
     get budgetPercent() { return this.budgetTotal ? Math.round(this.budgetSpent / this.budgetTotal * 100) : 0; },
+    get budgetCritical() {
+      return [...this.budgetRows].sort((a, b) => b.pct - a.pct || b.value - a.value);
+    },
     get budgetRemaining() { return this.budgetTotal - this.budgetSpent; },
     get budgetStatus() {
       if (!this.budgetTotal) return 'Belum ada batas pengeluaran';
@@ -616,6 +619,12 @@ document.addEventListener('alpine:init', () => {
       const id = `budget-${this.period.start}-${categoryId}`;
       if (!amount) return deleteDoc(doc(col('budgets'), id)).catch(e => this.fail(e));
       setDoc(doc(col('budgets'), id), { periodStart: this.period.start, categoryId, amount }).catch(e => this.fail(e));
+    },
+    filterCategory(name) {
+      this.go('/');
+      this.fType = '';
+      this.fCat = this.fCat === name ? '' : name;
+      this.recompute();
     },
     get budgetEditors() {
       return this.cats.filter(c => c.type === 'expense').map(c => ({

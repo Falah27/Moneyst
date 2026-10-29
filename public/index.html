@@ -127,16 +127,19 @@
       <div x-show="topCats.length" class="mt-5">
         <div class="flex items-baseline justify-between px-5">
           <p class="text-sm font-semibold" x-text="budgetRows.length ? 'Anggaran kategori' : 'Pengeluaran teratas'"></p>
-          <a href="#/stats" class="text-xs text-blue-600">Lihat semua</a>
+          <button x-show="budgetRows.length" @click="statsTab='budget'; go('/stats')"
+            class="text-xs text-blue-600">Lihat semua</button>
+          <a x-show="!budgetRows.length" href="#/stats" class="text-xs text-blue-600">Lihat semua</a>
         </div>
         <div class="no-scrollbar mt-2 flex gap-3 overflow-x-auto px-4">
           <template x-for="(c,i) in topCats" :key="c.name">
-            <div class="w-28 shrink-0 rounded-2xl bg-white p-3 text-center shadow-sm">
+            <button type="button" @click="c.budget ? filterCategory(c.name) : null"
+              class="w-28 shrink-0 rounded-2xl bg-white p-3 text-center shadow-sm">
               <div class="relative mx-auto h-14 w-14 rounded-full"
                 :style="`background:conic-gradient(${color(i)} ${c.visualPct ?? c.pct}%, #e2e8f0 0)`">
                 <div class="absolute inset-1.5 flex items-center justify-center rounded-full bg-white text-xl"
                   :style="`color:${color(i)}`" x-html="icon(c.name)"></div>
-              </div>
+              </button>
               <p class="mt-2 truncate text-xs font-medium" x-text="c.name"></p>
               <p class="text-[11px]" :class="c.warn ? 'text-amber-600' : 'text-slate-400'"
                 x-text="c.budget ? `${c.pct}% - ${short(c.value)} / ${short(c.budget)}${c.over ? ' - Lewat' : ''}` : c.pct + '% - ' + short(c.value)"></p>
@@ -245,17 +248,76 @@
 
     <!-- ============ STATISTIK ============ -->
     <section x-show="route==='stats' && !loading" class="-mt-10 space-y-3 px-4">
-      <div class="grid grid-cols-4 gap-1 rounded-2xl bg-white p-1 text-[11px] shadow-sm">
+      <div class="grid grid-cols-5 gap-1 rounded-2xl bg-white p-1 text-[11px] shadow-sm">
         <button @click="setStatsTab('summary')" :class="seg(statsTab==='summary')">Ringkas</button>
+        <button @click="setStatsTab('budget')" :class="seg(statsTab==='budget')">Anggaran</button>
         <button @click="setStatsTab('category')" :class="seg(statsTab==='category')">Kategori</button>
         <button @click="setStatsTab('wallet')" :class="seg(statsTab==='wallet')">Dompet</button>
         <button @click="setStatsTab('health')" :class="seg(statsTab==='health')">Sehat</button>
       </div>
-      <p x-show="statsData.length===0" class="rounded-2xl bg-white p-10 text-center text-sm text-slate-400 shadow-sm">
+      <p x-show="statsData.length===0 && budgetRows.length===0" class="rounded-2xl bg-white p-10 text-center text-sm text-slate-400 shadow-sm">
         Belum ada data di periode ini.
       </p>
 
-      <div x-show="statsData.length>0" class="space-y-3">
+      <div x-show="statsData.length>0 || budgetRows.length>0" class="space-y-3">
+        <div x-show="statsTab==='budget'" class="space-y-3">
+          <div class="rounded-2xl bg-white p-4 shadow-sm">
+            <div class="flex items-start justify-between">
+              <div>
+                <p class="text-[11px] uppercase tracking-[0.14em] text-slate-400">Periode ini</p>
+                <p class="mt-1 text-sm font-semibold">Anggaran pengeluaran</p>
+              </div>
+              <span class="rounded-full px-2.5 py-1 text-xs font-semibold"
+                :class="budgetPercent >= 100 ? 'bg-rose-100 text-rose-700' : budgetPercent >= 80 ? 'bg-amber-100 text-amber-700' : 'bg-blue-50 text-blue-700'"
+                x-text="budgetTotal ? budgetPercent + '%' : 'Belum diatur'"></span>
+            </div>
+            <div x-show="budgetTotal" class="mt-3">
+              <div class="h-2 overflow-hidden rounded-full bg-slate-100">
+                <div class="h-full rounded-full transition-all"
+                  :class="budgetPercent >= 100 ? 'bg-rose-500' : budgetPercent >= 80 ? 'bg-amber-500' : 'bg-blue-600'"
+                  :style="`width:${Math.min(100, budgetPercent)}%`"></div>
+              </div>
+              <div class="mt-2 flex justify-between text-xs">
+                <span class="text-slate-500" x-text="rupiah(budgetSpent)+' dari '+rupiah(budgetTotal)"></span>
+                <span :class="budgetRemaining < 0 ? 'text-rose-600' : 'text-slate-400'" x-text="budgetStatus"></span>
+              </div>
+            </div>
+            <a x-show="!budgetTotal" href="#/settings" class="mt-3 block rounded-xl bg-blue-50 px-3 py-2 text-center text-xs font-semibold text-blue-700">
+              Atur anggaran kategori
+            </a>
+          </div>
+          <div x-show="budgetRows.length" class="rounded-2xl bg-white p-4 shadow-sm">
+            <div class="space-y-4">
+              <template x-for="b in budgetCritical" :key="b.id">
+                <button type="button" @click="filterCategory(b.name)" class="block w-full text-left">
+                  <div class="flex items-center justify-between text-sm">
+                    <span class="font-medium" x-text="b.name"></span>
+                    <span class="text-xs font-semibold"
+                      :class="b.over ? 'text-rose-600' : b.warn ? 'text-amber-600' : 'text-slate-500'"
+                      x-text="b.pct+'%'"></span>
+                  </div>
+                  <div class="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-100">
+                    <div class="h-full rounded-full"
+                      :class="b.over ? 'bg-rose-500' : b.warn ? 'bg-amber-500' : 'bg-blue-500'"
+                      :style="`width:${Math.min(100,b.pct)}%`"></div>
+                  </div>
+                  <div class="mt-1 flex justify-between text-[11px] text-slate-400">
+                    <span x-text="rupiah(b.value)+' dari '+rupiah(b.budget)"></span>
+                    <span x-text="b.over ? 'Lewat '+rupiah(b.value-b.budget) : 'Sisa '+rupiah(b.budget-b.value)"></span>
+                  </div>
+                </button>
+              </template>
+            </div>
+          </div>
+          <div x-show="budgetTotal" class="rounded-2xl bg-white p-4 shadow-sm">
+            <div class="flex items-center justify-between">
+              <p class="text-sm font-semibold">Kecepatan belanja</p>
+              <span class="text-xs text-slate-400" x-text="budgetPercent+'% total anggaran'"></span>
+            </div>
+            <div class="mt-3 relative h-52"><canvas id="speed"></canvas></div>
+            <p class="mt-2 text-xs text-slate-400">Merah = pengeluaran kumulatif, biru putus-putus = jatah ideal.</p>
+          </div>
+        </div>
         <!-- donut + legenda -->
         <div x-show="statsTab==='summary'" class="rounded-3xl bg-white p-4 shadow-sm">
           <div class="flex items-center gap-4">
@@ -295,16 +357,6 @@
           <p class="mb-2 text-sm font-semibold"
             x-text="(statsType==='income' ? 'Pemasukan' : 'Pengeluaran') + ' per hari'"></p>
           <div class="relative h-44"><canvas id="trend"></canvas></div>
-        </div>
-
-        <div x-show="statsTab==='category' && budgetTotal" class="rounded-2xl bg-white p-4 shadow-sm">
-          <div class="flex items-center justify-between">
-            <p class="text-sm font-semibold">Kecepatan belanja</p>
-            <span class="text-xs" :class="budgetPercent >= 100 ? 'text-rose-600' : budgetPercent >= 80 ? 'text-amber-600' : 'text-slate-400'"
-              x-text="budgetPercent + '% dari total anggaran'"></span>
-          </div>
-          <div class="mt-3 relative h-52"><canvas id="speed"></canvas></div>
-          <p class="mt-2 text-xs text-slate-400">Garis merah adalah pengeluaran kumulatif; garis biru adalah jatah ideal harian.</p>
         </div>
 
         <!-- rincian kategori -->
