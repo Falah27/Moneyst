@@ -139,11 +139,11 @@
                 :style="`background:conic-gradient(${color(i)} ${c.visualPct ?? c.pct}%, #e2e8f0 0)`">
                 <div class="absolute inset-1.5 flex items-center justify-center rounded-full bg-white text-xl"
                   :style="`color:${color(i)}`" x-html="icon(c.name)"></div>
-              </button>
+              </div>
               <p class="mt-2 truncate text-xs font-medium" x-text="c.name"></p>
               <p class="text-[11px]" :class="c.warn ? 'text-amber-600' : 'text-slate-400'"
                 x-text="c.budget ? `${c.pct}% - ${short(c.value)} / ${short(c.budget)}${c.over ? ' - Lewat' : ''}` : c.pct + '% - ' + short(c.value)"></p>
-            </div>
+            </button>
           </template>
         </div>
       </div>
