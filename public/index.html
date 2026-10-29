@@ -465,12 +465,15 @@
         <template x-for="i in planList" :key="i.id">
           <div class="flex items-center gap-3 px-4 py-3">
             <button @click="togglePlan(i)" aria-label="Tandai rencana"
-              class="tap-target flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold"
-              :class="i.done ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300 text-transparent'">&#10003;</button>
+              :aria-label="i.done ? 'Batalkan item '+i.name : 'Tandai item '+i.name"
+              class="tap-target flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border text-xs font-bold transition-colors"
+              :class="i.done ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300 bg-white text-transparent'">
+              <span aria-hidden="true">&#10003;</span>
+            </button>
             <div class="min-w-0 flex-1">
               <p class="truncate" :class="i.done ? 'text-slate-400 line-through' : ''" x-text="i.name"></p>
               <p class="text-xs text-slate-400"
-                x-text="i.done && realOf(i) ? 'Terbeli '+rupiah(realOf(i)) : (i.estimate ? 'Estimasi '+rupiah(i.estimate) : '')"></p>
+                x-text="i.done && realOf(i) ? 'Terbeli '+rupiah(realOf(i)) : (i.estimate ? 'Belum dibeli · Estimasi '+rupiah(i.estimate) : 'Belum dibeli')"></p>
             </div>
             <button @click="delPlan(i)" class="tap-target p-1 text-slate-300" aria-label="Hapus rencana">
               <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
