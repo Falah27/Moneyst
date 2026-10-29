@@ -248,10 +248,9 @@
 
     <!-- ============ STATISTIK ============ -->
     <section x-show="route==='stats' && !loading" class="-mt-10 space-y-3 px-4">
-      <div class="grid grid-cols-5 gap-1 rounded-2xl bg-white p-1 text-[11px] shadow-sm">
+      <div class="grid grid-cols-4 gap-1 rounded-2xl bg-white p-1 text-[11px] shadow-sm">
         <button @click="setStatsTab('summary')" :class="seg(statsTab==='summary')">Ringkas</button>
         <button @click="setStatsTab('budget')" :class="seg(statsTab==='budget')">Anggaran</button>
-        <button @click="setStatsTab('category')" :class="seg(statsTab==='category')">Kategori</button>
         <button @click="setStatsTab('wallet')" :class="seg(statsTab==='wallet')">Dompet</button>
         <button @click="setStatsTab('health')" :class="seg(statsTab==='health')">Sehat</button>
       </div>
@@ -359,11 +358,14 @@
           <div class="relative h-44"><canvas id="trend"></canvas></div>
         </div>
 
-        <!-- rincian kategori -->
-        <div x-show="statsTab==='category'" class="space-y-4 rounded-2xl bg-white p-4 shadow-sm">
-          <p class="text-sm font-semibold">Rincian kategori</p>
+        <!-- rincian kategori dalam anggaran -->
+        <div x-show="statsTab==='budget'" class="space-y-4 rounded-2xl bg-white p-4 shadow-sm">
+          <div>
+            <p class="text-sm font-semibold">Pengeluaran per kategori</p>
+            <p class="mt-1 text-xs text-slate-400">Tekan kategori untuk melihat transaksi terkait.</p>
+          </div>
           <template x-for="(d,i) in statsData" :key="d.name">
-            <div>
+            <button type="button" @click="filterCategory(d.name)" class="block w-full text-left">
               <div class="flex items-center justify-between text-sm">
                 <span class="flex items-center gap-2">
                   <span class="flex text-lg text-slate-500" x-html="icon(d.name)"></span>
@@ -375,7 +377,7 @@
               <div class="mt-1.5 h-1.5 rounded-full bg-slate-100">
                 <div class="h-full rounded-full" :style="`width:${d.value/statsTotal*100}%;background:${color(i)}`"></div>
               </div>
-            </div>
+            </button>
           </template>
         </div>
 
